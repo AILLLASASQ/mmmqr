@@ -278,8 +278,7 @@
   let mixer; 
   let walkAction; 
 
-  loader.load('walk_animation.glb', (gltf) => {
-    const model = gltf.scene;
+loader.load('models/walk_animation.glb', (gltf) => {    const model = gltf.scene;
     model.scale.set(1, 1, 1); 
     model.position.y = 0; 
     
