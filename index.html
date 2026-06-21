@@ -95,7 +95,6 @@
   .card button{width:100%;padding:11px;border-radius:10px;border:1px solid var(--line);background:var(--void);color:var(--ink);font-size:13px;transition:.18s}
   .card button:hover{background:var(--brass);color:#1a1410;border-color:var(--brass)}
 
-  /* عصا التحكم (الحركة) — تظهر أثناء التجوّل (متطلب 7) */
   #joystick{position:fixed;bottom:30px;right:30px;width:120px;height:120px;z-index:25;border-radius:50%;
     border:1px solid var(--line);background:rgba(30,26,23,.4);display:none;touch-action:none}
   #joystick.show{display:block}
@@ -274,29 +273,26 @@
   const player = new THREE.Group();
   player.position.set(0,0,18); player.rotation.y = Math.PI;
   scene.add(player);
-  const legs = [];
-  (function buildAvatar(){
-    const skin=new THREE.MeshStandardMaterial({color:0xe0b48c, roughness:.8});
-    const jacket=new THREE.MeshStandardMaterial({color:0xc0392b, roughness:.7});
-    const pants=new THREE.MeshStandardMaterial({color:0x2f3b4c, roughness:.9});
-    const hair=new THREE.MeshStandardMaterial({color:0x2a2230, roughness:.9});
-    const torso=new THREE.Mesh(new THREE.CapsuleGeometry(0.28,0.55,4,12), jacket);
-    torso.position.y=1.15; torso.castShadow=true; player.add(torso);
-    const head=new THREE.Mesh(new THREE.SphereGeometry(0.26,16,16), skin);
-    head.position.y=1.72; head.castShadow=true; player.add(head);
-    const cap=new THREE.Mesh(new THREE.SphereGeometry(0.28,16,16,0,Math.PI*2,0,Math.PI/2), hair);
-    cap.position.y=1.78; player.add(cap);
-    for(const sx of [-0.14,0.14]){
-      const leg=new THREE.Mesh(new THREE.CapsuleGeometry(0.12,0.5,4,8), pants);
-      leg.position.set(sx,0.55,0); leg.castShadow=true; player.add(leg); legs.push(leg);
-    }
-    for(const sx of [-0.34,0.34]){
-      const arm=new THREE.Mesh(new THREE.CapsuleGeometry(0.1,0.45,4,8), jacket);
-      arm.position.set(sx,1.2,0); player.add(arm);
-    }
-  })();
 
   const loader = new GLTFLoader();
+  let mixer; 
+  let walkAction; 
+
+  loader.load('walk_animation.glb', (gltf) => {
+    const model = gltf.scene;
+    model.scale.set(1, 1, 1); 
+    model.position.y = 0; 
+    
+    model.traverse(o => { if(o.isMesh) { o.castShadow = true; o.receiveShadow = true; }});
+    player.add(model);
+
+    mixer = new THREE.AnimationMixer(model);
+    if(gltf.animations.length > 0) {
+      walkAction = mixer.clipAction(gltf.animations[0]);
+      walkAction.play();
+    }
+  });
+
   const interactables = [];
   const productMeshes = {};
   function placeholder(p){
@@ -419,10 +415,13 @@
         player.position.addScaledVector(moveV, PLAYER.speed*dt);
         collide(player.position);
         player.rotation.y = Math.atan2(moveV.x, moveV.z);
-        walkPhase += dt*10;
-      } else walkPhase *= 0.8;
-      legs[0].rotation.x = Math.sin(walkPhase)*0.5;
-      legs[1].rotation.x = -Math.sin(walkPhase)*0.5;
+        
+        if(walkAction) walkAction.paused = false;
+      } else {
+        if(walkAction) walkAction.paused = true;
+      }
+      
+      if(mixer) mixer.update(dt);
 
       let best=null, bd=3.2;
       for(const p of PRODUCTS){ const d=Math.hypot(player.position.x-p.pos[0], player.position.z-p.pos[1]);
@@ -506,14 +505,5 @@
   renderCart();
   animate();
   </script>
-  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.1.1/model-viewer.min.js"></script>
-
-<model-viewer 
-    src="walk_animation.glb" 
-    camera-controls 
-    autoplay 
-    shadow-intensity="1"
-    style="position: fixed; bottom: 20px; left: 20px; width: 300px; height: 400px; background-color: rgba(255,255,255,0.8); z-index: 100; border-radius: 12px; border: 1px solid #C9A24B;">
-</model-viewer>
 </body>
 </html>
