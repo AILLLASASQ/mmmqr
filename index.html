@@ -117,6 +117,7 @@
     <div class="actions">
       <button class="btn cart-toggle" id="open-cart">السلة<span class="cart-count" id="cart-count">0</span></button>
       <button class="btn btn-exit" id="exit-3d">⤢ الخروج تعبت امشي</button>
+      <button class="btn" id="admin-toggle" title="دخول المالك" style="align-self:flex-end;margin-top:4px">🔧</button>
     </div>
   </div>
 
@@ -221,7 +222,7 @@
     });
   }
 
-  const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false };
+  const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false, admin:false };
   const STREET = { halfX:6.3, halfZ:24 };
   const PLAYER = { speed:6, radius:0.5 };
 
@@ -626,6 +627,50 @@
   document.getElementById('back-3d').addEventListener('click', ()=>{ state.mode='3d'; shop2d.classList.remove('active'); enterScreen.classList.remove('hidden'); });
 
   function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800); }
+
+  // ===== [المرحلة 2-أ] دخول المالك (مرة واحدة) =====
+  // السر يُحفظ في sessionStorage (للجلسة فقط) ويُرسل لاحقاً في ترويسة x-admin-token.
+  // الحارس الحقيقي في الخادم (ADMIN_TOKEN) — إخفاء الأدوات في الواجهة للراحة فقط.
+  const ADMIN_KEY = 'tr_admin_token';
+
+  async function verifyToken(token){
+    try{
+      const r = await fetch('/api/admin/check', { method:'POST',
+        headers:{ 'Content-Type':'application/json', 'x-admin-token': token } });
+      return r.ok;
+    }catch(e){ return false; }
+  }
+
+  function setAdminUI(on){
+    state.admin = on;
+    const btn = document.getElementById('admin-toggle');
+    if(btn){
+      btn.textContent = on ? '🔧 مالك' : '🔧';
+      btn.style.borderColor = on ? 'var(--ok)' : '';
+      btn.style.color = on ? 'var(--ok)' : '';
+    }
+  }
+
+  async function adminLogin(){
+    if(state.admin){
+      sessionStorage.removeItem(ADMIN_KEY); setAdminUI(false); toast('خرجت من وضع المالك'); return;
+    }
+    const token = prompt('أدخل سر المالك:');
+    if(!token) return;
+    toast('جارٍ التحقق…');
+    const ok = await verifyToken(token);
+    if(ok){ sessionStorage.setItem(ADMIN_KEY, token); setAdminUI(true); toast('أهلاً بك أيها المالك ✓'); }
+    else { toast('سر غير صحيح'); }
+  }
+
+  (async function restoreAdmin(){
+    const saved = sessionStorage.getItem(ADMIN_KEY);
+    if(saved && await verifyToken(saved)) setAdminUI(true);
+    else sessionStorage.removeItem(ADMIN_KEY);
+  })();
+
+  const _adminBtn = document.getElementById('admin-toggle');
+  if(_adminBtn) _adminBtn.addEventListener('click', adminLogin);
 
   // [المرحلة 1] جلب المشهد من Firestore عبر الخادم (مع رجوع آمن للافتراضي) ثم البناء
   async function loadScene(){
