@@ -287,13 +287,18 @@
     let meshes = 0; model.traverse(o => { if (o.isMesh) meshes++; });
     console.log('[character] ميش=' + meshes, '| أنميشن داخلي=', charGltf.animations.map(a => a.name));
 
-    const sz = new THREE.Vector3(); new THREE.Box3().setFromObject(model).getSize(sz);
-    if (sz.y > 0) model.scale.setScalar(TARGET_HEIGHT / sz.y);
-    const b = new THREE.Box3().setFromObject(model);
-    model.position.y -= b.min.y;
-
+    // [PATCH] robust-fit: نضيف ثم نحدّث المصفوفات ثم نقيس ونصغّر فعلياً
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     player.add(model);
+    player.updateWorldMatrix(true, true);
+    let bb = new THREE.Box3().setFromObject(model);
+    const size = new THREE.Vector3(); bb.getSize(size);
+    const h = size.y || 1;
+    model.scale.multiplyScalar(TARGET_HEIGHT / h);          // تطبيع الارتفاع إلى TARGET_HEIGHT
+    player.updateWorldMatrix(true, true);
+    bb = new THREE.Box3().setFromObject(model);
+    model.position.y -= bb.min.y;                           // القدمان عند الأرض
+    console.log('[scale] ارتفاع أصلي=' + h.toFixed(2) + ' → مضبوط=' + TARGET_HEIGHT);
     mixer = new THREE.AnimationMixer(model);
 
     const applyWalk = (clip) => {
