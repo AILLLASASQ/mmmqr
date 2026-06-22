@@ -277,17 +277,16 @@
   const loader = new GLTFLoader();
   let mixer = null, walkAction = null;
 
-  // [PATCH] fox-single-file: الميش + المشي من نفس الملف (الثعلب) مع مقياس تلقائي
-  const CHARACTER     = 'models/walk_animation.glb';   // يحوي الميش + الأنميشن
-  const TARGET_HEIGHT = 1.6;                             // ارتفاع تقريبي — غيّره حسب رغبتك
+  // [PATCH] character-mesh+walk-clip: الجسم من character.glb + المشي من walk_animation2.glb (بلا ثعلب)
+  const CHARACTER_MESH = 'models/walk_animation.glb';        // الجسم الظاهر
+  const WALK_FILE      = 'models/walk_animation.glb';  // مصدر أنميشن المشي فقط
+  const TARGET_HEIGHT  = 1.7;
 
-  loader.load(CHARACTER, (gltf) => {
-    const model = gltf.scene;
-
+  loader.load(CHARACTER_MESH, (charGltf) => {
+    const model = charGltf.scene;
     let meshes = 0; model.traverse(o => { if (o.isMesh) meshes++; });
-    console.log('[fox] ميش=' + meshes, '| أنميشن=', gltf.animations.map(a => a.name));
+    console.log('[character] ميش=' + meshes, '| أنميشن داخلي=', charGltf.animations.map(a => a.name));
 
-    // الثعلب مُصدّر بمقياس ضخم → نضبطه تلقائياً + ننزل قدميه للأرض
     const sz = new THREE.Vector3(); new THREE.Box3().setFromObject(model).getSize(sz);
     if (sz.y > 0) model.scale.setScalar(TARGET_HEIGHT / sz.y);
     const b = new THREE.Box3().setFromObject(model);
@@ -295,14 +294,27 @@
 
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     player.add(model);
-
-    // اختيار أنميشن المشي بالاسم (Survey/Walk/Run)، وإلا الأطول/الأول كبديل
     mixer = new THREE.AnimationMixer(model);
-    const clips = gltf.animations || [];
-    const walk = clips.find(c => /walk/i.test(c.name)) || clips[1] || clips[0];
-    if (walk) { walkAction = mixer.clipAction(walk); walkAction.play(); }
-    else console.warn('⚠ لا يوجد أي clip في', CHARACTER);
-  }, undefined, e => console.warn('تعذّر تحميل', CHARACTER, e));
+
+    const applyWalk = (clip) => {
+      const names = new Set(); model.traverse(o => names.add(o.name));
+      const bound = clip.tracks.filter(t => names.has(t.name.split('.')[0])).length;
+      console.log('[walk] clip=' + clip.name + ' | مسارات مرتبطة=' + bound + '/' + clip.tracks.length);
+      if (bound === 0) console.warn('⚠ هيكل العظام غير متطابق: أنميشن ' + WALK_FILE + ' لا يناسب ' + CHARACTER_MESH + ' (ستقف الشخصية بلا حركة).');
+      walkAction = mixer.clipAction(clip); walkAction.play();
+    };
+
+    loader.load(WALK_FILE, (walkGltf) => {
+      const clips = walkGltf.animations || [];
+      const walk = clips.find(c => /walk/i.test(c.name)) || clips[1] || clips[0];
+      if (walk) applyWalk(walk);
+      else if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
+      else console.warn('⚠ لا يوجد أي clip للمشي.');
+    }, undefined, e => {
+      console.warn('تعذّر تحميل', WALK_FILE, e);
+      if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
+    });
+  }, undefined, e => console.warn('تعذّر تحميل', CHARACTER_MESH, e));
 
   const interactables = [];
   const productMeshes = {};
