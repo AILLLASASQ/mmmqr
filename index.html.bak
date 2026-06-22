@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>شارع المتجر ثلاثي الأبعاد — منظور الشخص الثالث</title>
+<style>
+  :root{
+    --void:#14110F;--surface:#1E1A17;--surface-2:#2A2421;--line:#3A332E;
+    --ink:#F2EDE6;--muted:#9B9289;--brass:#C9A24B;--brass-soft:rgba(201,162,75,.14);
+    --ok:#7FA66A;--serif:Georgia,'Times New Roman',serif;
+    --sans:system-ui,-apple-system,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--void);color:var(--ink);font-family:var(--sans)}
+  canvas{display:block;touch-action:none}
+  button{font-family:inherit;cursor:pointer}
+
+  .topbar{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;align-items:center;
+    justify-content:space-between;padding:14px 18px;
+    background:linear-gradient(to bottom,rgba(20,17,15,.9),rgba(20,17,15,0));pointer-events:none}
+  .brand{font-family:var(--serif);font-size:18px}.brand span{color:var(--brass)}
+  .topbar .actions{display:flex;gap:10px;pointer-events:auto}
+  .btn{border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:9px 16px;
+    border-radius:10px;font-size:13px;transition:.18s;display:inline-flex;align-items:center;gap:8px}
+  .btn:hover{border-color:var(--brass);color:var(--brass)}
+  .btn-exit{background:var(--brass);color:#1a1410;border-color:var(--brass);font-weight:600}
+  .btn-exit:hover{filter:brightness(1.08);color:#1a1410}
+  .cart-toggle{position:relative}
+  .cart-count{position:absolute;top:-7px;left:-7px;min-width:19px;height:19px;background:var(--brass);
+    color:#1a1410;border-radius:99px;font-size:11px;font-weight:700;display:grid;place-items:center;
+    padding:0 5px;transform:scale(0);transition:.2s}
+  .cart-count.show{transform:scale(1)}
+
+  #hint{position:fixed;top:62px;left:50%;transform:translateX(-50%);z-index:20;
+    background:rgba(20,17,15,.82);border:1px solid var(--line);padding:7px 14px;border-radius:99px;
+    font-size:12.5px;pointer-events:none;opacity:0;transition:.18s;white-space:nowrap}
+  #hint.show{opacity:1}#hint b{color:var(--brass)}
+
+  #enter{position:fixed;inset:0;z-index:40;display:grid;place-items:center;
+    background:radial-gradient(circle at 50% 40%,rgba(30,26,23,.55),rgba(20,17,15,.95));
+    text-align:center;cursor:pointer;transition:.3s}
+  #enter.hidden{opacity:0;pointer-events:none}
+  #enter .ring{width:78px;height:78px;border-radius:50%;border:1px solid var(--brass);display:grid;
+    place-items:center;margin:0 auto 22px;animation:pulse 2.6s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 var(--brass-soft)}70%{box-shadow:0 0 0 22px rgba(201,162,75,0)}100%{box-shadow:0 0 0 0 rgba(201,162,75,0)}}
+  #enter h1{font-family:var(--serif);font-size:30px;font-weight:400;margin-bottom:10px}
+  #enter p{color:var(--muted);font-size:14px;line-height:1.9;max-width:440px}
+  #enter kbd{background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:2px 7px;font-size:12px}
+
+  aside{position:fixed;top:0;bottom:0;z-index:50;background:var(--surface);width:min(380px,90vw);
+    transition:transform .32s cubic-bezier(.2,.7,.2,1);display:flex;flex-direction:column}
+  #product-panel{right:0;border-left:1px solid var(--line);transform:translateX(100%);padding:26px 24px;overflow-y:auto}
+  #product-panel.open{transform:translateX(0)}
+  .pp-index{font-size:12px;letter-spacing:3px;color:var(--brass)}
+  .pp-rule{height:1px;background:var(--line);margin:14px 0 18px}
+  .pp-name{font-family:var(--serif);font-size:26px;line-height:1.2;margin-bottom:6px}
+  .pp-price{font-size:20px;color:var(--brass);margin-bottom:20px}.pp-price small{color:var(--muted);font-size:13px}
+  .pp-desc{color:var(--muted);font-size:14px;line-height:1.95;margin-bottom:28px}
+  .pp-add{margin-top:auto;width:100%;padding:14px;border-radius:12px;border:none;background:var(--brass);
+    color:#1a1410;font-size:15px;font-weight:700;transition:.18s}
+  .pp-add:hover{filter:brightness(1.08)}.pp-add.added{background:var(--ok);color:#0f140c}
+  .pp-close{position:absolute;top:18px;left:18px;background:none;border:none;color:var(--muted);font-size:24px}
+  .pp-close:hover{color:var(--ink)}
+
+  #cart-panel{left:0;border-right:1px solid var(--line);transform:translateX(-100%);padding:24px 22px;width:min(360px,90vw)}
+  #cart-panel.open{transform:translateX(0)}
+  .cart-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+  .cart-head h2{font-family:var(--serif);font-weight:400;font-size:22px}
+  .cart-items{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:12px}
+  .cart-empty{color:var(--muted);font-size:14px;text-align:center;margin-top:40px;line-height:2}
+  .cart-row{display:flex;align-items:center;gap:12px;padding:12px;background:var(--surface-2);border-radius:12px}
+  .cart-swatch{width:38px;height:38px;border-radius:8px;flex-shrink:0}
+  .cart-row .info{flex:1;min-width:0}.cart-row .info b{display:block;font-size:14px}.cart-row .info span{font-size:12px;color:var(--muted)}
+  .qty{display:flex;align-items:center;gap:8px}
+  .qty button{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);background:var(--void);color:var(--ink);font-size:15px}
+  .qty button:hover{border-color:var(--brass);color:var(--brass)}
+  .cart-foot{border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
+  .cart-total{display:flex;justify-content:space-between;font-size:16px;margin-bottom:14px}.cart-total b{color:var(--brass)}
+  .checkout{width:100%;padding:13px;border-radius:12px;border:none;background:var(--brass);color:#1a1410;font-weight:700;font-size:15px}
+  .checkout:disabled{opacity:.4;cursor:not-allowed}
+
+  #shop-2d{position:fixed;inset:0;z-index:45;background:var(--void);overflow-y:auto;display:none;padding:80px 24px 40px}
+  #shop-2d.active{display:block}
+  .s2-head{max-width:1100px;margin:0 auto 30px;text-align:center}
+  .s2-head h1{font-family:var(--serif);font-weight:400;font-size:34px;margin-bottom:8px}
+  .s2-head p{color:var(--muted);font-size:14px}
+  .grid-2d{max-width:1100px;margin:0 auto;display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;overflow:hidden;transition:.2s}
+  .card:hover{border-color:var(--brass);transform:translateY(-3px)}
+  .card .thumb{height:160px}.card .body{padding:16px}
+  .card h3{font-family:var(--serif);font-weight:400;font-size:18px;margin-bottom:4px}
+  .card .price{color:var(--brass);font-size:16px;margin-bottom:10px}
+  .card .d{color:var(--muted);font-size:12.5px;line-height:1.8;margin-bottom:14px;min-height:46px}
+  .card button{width:100%;padding:11px;border-radius:10px;border:1px solid var(--line);background:var(--void);color:var(--ink);font-size:13px;transition:.18s}
+  .card button:hover{background:var(--brass);color:#1a1410;border-color:var(--brass)}
+
+  #joystick{position:fixed;bottom:30px;right:30px;width:120px;height:120px;z-index:25;border-radius:50%;
+    border:1px solid var(--line);background:rgba(30,26,23,.4);display:none;touch-action:none}
+  #joystick.show{display:block}
+  #thumb{position:absolute;top:50%;left:50%;width:50px;height:50px;margin:-25px 0 0 -25px;border-radius:50%;
+    background:var(--brass-soft);border:1px solid var(--brass)}
+
+  #help{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:20;color:var(--muted);
+    font-size:12px;background:rgba(20,17,15,.6);padding:7px 14px;border-radius:99px;border:1px solid var(--line);pointer-events:none}
+  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(20px);z-index:60;
+    background:var(--ok);color:#0f140c;padding:11px 20px;border-radius:99px;font-size:14px;font-weight:600;opacity:0;transition:.3s;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="topbar">
+    <div class="brand">شارع <span>أوريون</span> · المتجر الافتراضي</div>
+    <div class="actions">
+      <button class="btn cart-toggle" id="open-cart">السلة<span class="cart-count" id="cart-count">0</span></button>
+      <button class="btn btn-exit" id="exit-3d">⤢ الخروج من العرض ثلاثي الأبعاد</button>
+    </div>
+  </div>
+
+  <div id="hint"></div>
+  <div id="help">تحرّك: <kbd>W A S D</kbd> أو العصا · أدِر الكاميرا: اسحب · التفاصيل: انقر على المنتج</div>
+
+  <div id="enter">
+    <div>
+      <div class="ring">
+        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C9A24B" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      </div>
+      <h1>ابدأ التجوّل</h1>
+      <p>انقر للبدء. تمشي الشخصية بـ <kbd>W A S D</kbd> أو العصا، تُدار الكاميرا بالسحب، وتنقر على أي منتج في الشارع لعرض تفاصيله.</p>
+    </div>
+  </div>
+
+  <aside id="product-panel">
+    <button class="pp-close" id="pp-close">×</button>
+    <div class="pp-index" id="pp-index"></div><div class="pp-rule"></div>
+    <div class="pp-name" id="pp-name"></div><div class="pp-price" id="pp-price"></div>
+    <div class="pp-desc" id="pp-desc"></div>
+    <button class="pp-add" id="pp-add">أضِف إلى السلة</button>
+  </aside>
+
+  <aside id="cart-panel">
+    <div class="cart-head"><h2>سلة المشتريات</h2><button class="btn" id="close-cart" style="padding:6px 12px">إغلاق</button></div>
+    <div class="cart-items" id="cart-items"></div>
+    <div class="cart-foot">
+      <div class="cart-total"><span>الإجمالي</span><b id="cart-total">0 ر.س</b></div>
+      <button class="checkout" id="checkout" disabled>إتمام الشراء</button>
+    </div>
+  </aside>
+
+  <div id="shop-2d">
+    <div class="s2-head">
+      <h1>المتجر — التصفّح التقليدي</h1>
+      <p>نفس المنتجات بعرض ثنائي الأبعاد. السلة متزامنة بين الوضعين.</p>
+      <button class="btn btn-exit" id="back-3d" style="margin-top:18px">↺ العودة للعرض ثلاثي الأبعاد</button>
+    </div>
+    <div class="grid-2d" id="grid-2d"></div>
+  </div>
+
+  <div id="joystick"><div id="thumb"></div></div>
+  <div class="toast" id="toast"></div>
+
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+  } }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+  const CURRENCY = 'ر.س';
+  const PRODUCTS = [
+    { id:'p1', name:'كرسي أوريون', price:1290, color:0xC9A24B, shape:'chair', pos:[-3,-12], model:null,
+      description:'كرسي بهيكل من خشب الجوز ووسائد جلدية، يجمع الدفء والخطوط الاسكندنافية النظيفة.' },
+    { id:'p2', name:'مزهرية لُمى',  price:340,  color:0x8FB6C9, shape:'vase',  pos:[ 3,-6 ], model:null,
+      description:'مزهرية خزفية مصنوعة يدوياً بطلاء لامع، لمسة هادئة لأي مساحة.' },
+    { id:'p3', name:'مصباح سُهى',   price:560,  color:0xE0C56B, shape:'lamp',  pos:[-3, 0 ], model:null,
+      description:'مصباح أرضي بإضاءة دافئة قابلة للتعتيم، يمنح الركن أجواء مسائية.' },
+    { id:'p4', name:'طاولة نجمة',   price:980,  color:0xB07A4A, shape:'table', pos:[ 3, 6 ], model:null,
+      description:'طاولة جانبية بسطح رخامي وقاعدة معدنية، متينة وأنيقة.' },
+    { id:'p5', name:'تمثال فلَك',   price:1750, color:0xC9C2B8, shape:'art',   pos:[-3, 12], model:null,
+      description:'قطعة نحتية محدودة الإصدار تتبدّل ألوانها مع زوايا الإضاءة.' },
+  ];
+
+  const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false };
+  const STREET = { halfX:6.3, halfZ:24 };
+  const PLAYER = { speed:6, radius:0.5 };
+
+  const canvas = document.getElementById('c');
+  const scene  = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x9fb0bd, 22, 70);
+
+  const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 300);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.1;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  (function sky(){
+    const cv=document.createElement('canvas'); cv.width=2; cv.height=256;
+    const g=cv.getContext('2d').createLinearGradient(0,0,0,256);
+    g.addColorStop(0,'#acc3d4'); g.addColorStop(.5,'#cdd6cf'); g.addColorStop(1,'#e9d3ad');
+    const x=cv.getContext('2d'); x.fillStyle=g; x.fillRect(0,0,2,256);
+    const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace;
+    scene.background=t;
+  })();
+
+  scene.add(new THREE.AmbientLight(0xffe9c7, 0.5));
+  scene.add(new THREE.HemisphereLight(0xbcd2e0, 0x4a4036, 0.55));
+  const sun = new THREE.DirectionalLight(0xfff0d6, 1.2);
+  sun.position.set(14, 22, 10); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048,2048);
+  sun.shadow.camera.near=1; sun.shadow.camera.far=80;
+  sun.shadow.camera.left=-30; sun.shadow.camera.right=30; sun.shadow.camera.top=30; sun.shadow.camera.bottom=-30;
+  sun.shadow.bias=-0.0004; scene.add(sun);
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120,120),
+    new THREE.MeshStandardMaterial({color:0x2b2723, roughness:1}));
+  ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+  const sidewalkMat=new THREE.MeshStandardMaterial({color:0x3b362f, roughness:1});
+  [-7.5,7.5].forEach(x=>{ const s=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.2,STREET.halfZ*2+8),sidewalkMat);
+    s.position.set(x,0.1,0); s.receiveShadow=true; scene.add(s); });
+
+  function facadeTexture(base){
+    const cv=document.createElement('canvas'); cv.width=128; cv.height=128; const x=cv.getContext('2d');
+    x.fillStyle=base; x.fillRect(0,0,128,128);
+    for(let r=0;r<4;r++)for(let c=0;c<4;c++){
+      const lit=Math.random()<0.55;
+      x.fillStyle = lit ? `rgba(255,222,150,${0.55+Math.random()*0.4})` : 'rgba(22,26,32,.92)';
+      x.fillRect(12+c*28, 12+r*28, 18, 22);
+    }
+    const t=new THREE.CanvasTexture(cv); t.colorSpace=THREE.SRGBColorSpace;
+    t.wrapS=t.wrapT=THREE.RepeatWrapping; return t;
+  }
+  const tints=['#6e6a73','#7a6a5e','#5e6b6e','#7d7468','#675f6b','#73685f'];
+  const buildingBoxes=[];
+  function addBuilding(x,z,w,d,h,tint){
+    const tex=facadeTexture(tint); tex.repeat.set(Math.max(1,Math.round(w/3)), Math.max(1,Math.round(h/3)));
+    const wall=new THREE.MeshStandardMaterial({map:tex, roughness:.95});
+    const roof=new THREE.MeshStandardMaterial({color:0x1b1a20, roughness:1});
+    const b=new THREE.Mesh(new THREE.BoxGeometry(w,h,d), [wall,wall,roof,roof,wall,wall]);
+    b.position.set(x,h/2,z); b.castShadow=true; b.receiveShadow=true; scene.add(b);
+    buildingBoxes.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2});
+  }
+  (function buildCity(){
+    for(let z=-STREET.halfZ; z<=STREET.halfZ; z+=6.5){
+      if(Math.random()<0.12) continue;
+      const h1=6+Math.random()*11, h2=6+Math.random()*11;
+      addBuilding(-10-Math.random()*1.5, z, 4+Math.random()*2, 5, h1, tints[(Math.random()*tints.length)|0]);
+      addBuilding( 10+Math.random()*1.5, z, 4+Math.random()*2, 5, h2, tints[(Math.random()*tints.length)|0]);
+    }
+    for(let z=-18; z<=18; z+=12){
+      [-6.6,6.6].forEach(x=>{
+        const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,3.2,8),
+          new THREE.MeshStandardMaterial({color:0x2a2622}));
+        pole.position.set(x,1.6,z); pole.castShadow=true; scene.add(pole);
+        const bulb=new THREE.Mesh(new THREE.SphereGeometry(0.18,12,12),
+          new THREE.MeshStandardMaterial({color:0xffe6a8, emissive:0xffcf73, emissiveIntensity:1.4}));
+        bulb.position.set(x,3.3,z); scene.add(bulb);
+      });
+    }
+  })();
+
+  const player = new THREE.Group();
+  player.position.set(0,0,18); player.rotation.y = Math.PI;
+  scene.add(player);
+
+  const loader = new GLTFLoader();
+  let mixer; 
+  let walkAction; 
+
+loader.load('models/walk_animation2.glb', (gltf) => {    const model = gltf.scene;
+    model.scale.set(1, 1, 1); 
+    model.position.y = 0; 
+    
+    model.traverse(o => { if(o.isMesh) { o.castShadow = true; o.receiveShadow = true; }});
+    player.add(model);
+
+    mixer = new THREE.AnimationMixer(model);
+    if(gltf.animations.length > 0) {
+      walkAction = mixer.clipAction(gltf.animations[0]);
+      walkAction.play();
+    }
+  });
+
+  const interactables = [];
+  const productMeshes = {};
+  function placeholder(p){
+    const m=new THREE.MeshStandardMaterial({color:p.color, roughness:.35, metalness:.4});
+    let g; switch(p.shape){
+      case 'vase': g=new THREE.CylinderGeometry(.28,.42,1,24); break;
+      case 'lamp': g=new THREE.ConeGeometry(.5,1.1,24); break;
+      case 'table':g=new THREE.BoxGeometry(1.1,.18,1.1); break;
+      case 'art':  g=new THREE.TorusKnotGeometry(.42,.15,120,16); break;
+      default:     g=new THREE.BoxGeometry(.9,.9,.9);
+    }
+    const mesh=new THREE.Mesh(g,m); mesh.castShadow=true; return mesh;
+  }
+  function addStand(p){
+    const [x,z]=p.pos;
+    const base=new THREE.Mesh(new THREE.CylinderGeometry(.85,.95,.4,32),
+      new THREE.MeshStandardMaterial({color:0x231f1b, roughness:.8}));
+    base.position.set(x,.2,z); base.receiveShadow=true; scene.add(base);
+    const ring=new THREE.Mesh(new THREE.RingGeometry(.95,1.15,32),
+      new THREE.MeshBasicMaterial({color:p.color, transparent:true, opacity:.5, side:THREE.DoubleSide}));
+    ring.rotation.x=-Math.PI/2; ring.position.set(x,.42,z); scene.add(ring); p._ring=ring;
+
+    const put=(mesh)=>{
+      mesh.position.set(x,1.25,z); mesh.userData.product=p;
+      mesh.traverse(o=>{ if(o.isMesh) o.userData.product=p; });
+      scene.add(mesh); interactables.push(mesh); productMeshes[p.id]=mesh;
+    };
+    if(p.model){
+      loader.load(p.model, gltf=>{ gltf.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.userData.product=p;}}); put(gltf.scene); },
+        undefined, ()=>put(placeholder(p)));
+    } else put(placeholder(p));
+  }
+
+  const cam = { yaw:0, pitch:0.42, dist:7.5 };
+  const moveInput = { forward:0, right:0 };
+  const keys = { w:false,a:false,s:false,d:false };
+  const enterScreen=document.getElementById('enter');
+  const joystick=document.getElementById('joystick');
+
+  function startWalk(){ state.active=true; enterScreen.classList.add('hidden'); joystick.classList.add('show'); }
+  function pauseWalk(){ state.active=false; joystick.classList.remove('show'); }
+  function promptResume(){ if(state.mode==='3d') startWalk(); }
+  enterScreen.addEventListener('click', startWalk);
+
+  function syncKeys(){ moveInput.forward=(keys.w?1:0)-(keys.s?1:0); moveInput.right=(keys.d?1:0)-(keys.a?1:0); }
+  addEventListener('keydown',e=>{const k=e.key.toLowerCase(); if(k in keys){keys[k]=true; syncKeys();}});
+  addEventListener('keyup',  e=>{const k=e.key.toLowerCase(); if(k in keys){keys[k]=false; syncKeys();}});
+
+  const raycaster=new THREE.Raycaster();
+  let drag=false, lastX=0, lastY=0, moved=false, dragId=null;
+  canvas.addEventListener('pointerdown', e=>{
+    if(!state.active) return;
+    drag=true; moved=false; dragId=e.pointerId; lastX=e.clientX; lastY=e.clientY;
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', e=>{
+    if(!drag || e.pointerId!==dragId) return;
+    const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
+    if(Math.abs(dx)+Math.abs(dy)>4) moved=true;
+    cam.yaw   -= dx*0.005;
+    cam.pitch  = Math.max(0.12, Math.min(1.1, cam.pitch - dy*0.005));
+  });
+  canvas.addEventListener('pointerup', e=>{
+    if(e.pointerId!==dragId) return;
+    if(!moved) selectAt(e.clientX, e.clientY);
+    drag=false; dragId=null;
+  });
+  canvas.addEventListener('wheel', e=>{ cam.dist=Math.max(4,Math.min(14, cam.dist+Math.sign(e.deltaY))); }, {passive:true});
+
+  function selectAt(cx,cy){
+    if(state.mode!=='3d') return;
+    raycaster.setFromCamera(new THREE.Vector2((cx/innerWidth)*2-1, -(cy/innerHeight)*2+1), camera);
+    const hit=raycaster.intersectObjects(interactables, true)[0];
+    if(hit) openProduct(hit.object.userData.product);
+  }
+
+  (function setupJoystick(){
+    const thumb=document.getElementById('thumb'); const R=45; let on=false, jid=null, cx=0, cy=0;
+    joystick.addEventListener('pointerdown', e=>{ on=true; jid=e.pointerId; const r=joystick.getBoundingClientRect();
+      cx=r.left+r.width/2; cy=r.top+r.height/2; joystick.setPointerCapture(e.pointerId); });
+    joystick.addEventListener('pointermove', e=>{ if(!on||e.pointerId!==jid) return;
+      let dx=e.clientX-cx, dy=e.clientY-cy; const d=Math.min(Math.hypot(dx,dy),R), a=Math.atan2(dy,dx);
+      dx=Math.cos(a)*d; dy=Math.sin(a)*d; thumb.style.transform=`translate(${dx}px,${dy}px)`;
+      moveInput.right=dx/R; moveInput.forward=-dy/R; });
+    const off=()=>{ on=false; jid=null; thumb.style.transform=''; moveInput.forward=0; moveInput.right=0; };
+    joystick.addEventListener('pointerup', off); joystick.addEventListener('pointercancel', off);
+  })();
+
+  function collide(pos){
+    pos.x=Math.max(-STREET.halfX,Math.min(STREET.halfX,pos.x));
+    pos.z=Math.max(-STREET.halfZ,Math.min(STREET.halfZ,pos.z));
+    for(const p of PRODUCTS){
+      const dx=pos.x-p.pos[0], dz=pos.z-p.pos[1], min=1.1+PLAYER.radius, dist=Math.hypot(dx,dz);
+      if(dist<min && dist>1e-4){ const f=min/dist; pos.x=p.pos[0]+dx*f; pos.z=p.pos[1]+dz*f; }
+    }
+    for(const b of buildingBoxes){
+      if(pos.x>b.minX-PLAYER.radius&&pos.x<b.maxX+PLAYER.radius&&pos.z>b.minZ-PLAYER.radius&&pos.z<b.maxZ+PLAYER.radius){
+        pos.x = pos.x<(b.minX+b.maxX)/2 ? b.minX-PLAYER.radius : b.maxX+PLAYER.radius;
+      }
+    }
+  }
+
+  const forwardV=new THREE.Vector3(), rightV=new THREE.Vector3(), moveV=new THREE.Vector3(), up=new THREE.Vector3(0,1,0);
+  const hint=document.getElementById('hint'); let nearProduct=null;
+  const clock=new THREE.Clock(); let walkPhase=0;
+
+  function animate(){
+    requestAnimationFrame(animate);
+    const dt=Math.min(clock.getDelta(),0.05);
+
+    if(state.active){
+      forwardV.set(player.position.x-camera.position.x, 0, player.position.z-camera.position.z);
+      if(forwardV.lengthSq()>1e-6) forwardV.normalize();
+      rightV.crossVectors(forwardV, up).normalize();
+      moveV.set(0,0,0).addScaledVector(forwardV, moveInput.forward).addScaledVector(rightV, moveInput.right);
+
+      const moving = moveV.lengthSq()>1e-4;
+      if(moving){
+        moveV.normalize();
+        player.position.addScaledVector(moveV, PLAYER.speed*dt);
+        collide(player.position);
+        player.rotation.y = Math.atan2(moveV.x, moveV.z);
+        
+        if(walkAction) walkAction.paused = false;
+      } else {
+        if(walkAction) walkAction.paused = true;
+      }
+      
+      if(mixer) mixer.update(dt);
+
+      let best=null, bd=3.2;
+      for(const p of PRODUCTS){ const d=Math.hypot(player.position.x-p.pos[0], player.position.z-p.pos[1]);
+        if(d<bd){ bd=d; best=p; } }
+      if(best!==nearProduct){
+        nearProduct=best;
+        if(best){ hint.innerHTML=`<b>${best.name}</b> · ${best.price} ${CURRENCY} — انقر للتفاصيل`; hint.classList.add('show'); }
+        else hint.classList.remove('show');
+      }
+    }
+
+    const t=performance.now()*0.002;
+    for(const p of PRODUCTS) if(p._ring) p._ring.material.opacity = 0.35+0.25*Math.sin(t + p.pos[1]);
+
+    const tx=player.position.x + Math.sin(cam.yaw)*Math.cos(cam.pitch)*cam.dist;
+    const tz=player.position.z + Math.cos(cam.yaw)*Math.cos(cam.pitch)*cam.dist;
+    const ty=player.position.y + Math.sin(cam.pitch)*cam.dist + 1.2;
+    camera.position.lerp(new THREE.Vector3(tx,ty,tz), 1-Math.pow(0.001,dt));
+    camera.lookAt(player.position.x, player.position.y+1.3, player.position.z);
+
+    renderer.render(scene,camera);
+  }
+  addEventListener('resize',()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth,innerHeight); });
+
+  const productPanel=document.getElementById('product-panel'), cartPanel=document.getElementById('cart-panel');
+  const hex=n=>'#'+n.toString(16).padStart(6,'0');
+
+  function openProduct(p){
+    pauseWalk(); state.activeProduct=p;
+    document.getElementById('pp-index').textContent=`منتج ${String(PRODUCTS.indexOf(p)+1).padStart(2,'0')} / ${PRODUCTS.length}`;
+    document.getElementById('pp-name').textContent=p.name;
+    document.getElementById('pp-price').innerHTML=`${p.price.toLocaleString('ar')} <small>${CURRENCY}</small>`;
+    document.getElementById('pp-desc').textContent=p.description;
+    const b=document.getElementById('pp-add'); b.textContent='أضِف إلى السلة'; b.classList.remove('added');
+    productPanel.classList.add('open');
+  }
+  function closeProduct(){ productPanel.classList.remove('open'); promptResume(); }
+  document.getElementById('pp-close').addEventListener('click', closeProduct);
+  document.getElementById('pp-add').addEventListener('click', ()=>{
+    addToCart(state.activeProduct);
+    const b=document.getElementById('pp-add'); b.textContent='تمت الإضافة ✓'; b.classList.add('added');
+    toast(`أُضيف «${state.activeProduct.name}» إلى السلة`);
+  });
+
+  function addToCart(p){ const e=state.cart.get(p.id); if(e)e.qty++; else state.cart.set(p.id,{product:p,qty:1}); renderCart(); }
+  function changeQty(id,d){ const e=state.cart.get(id); if(!e)return; e.qty+=d; if(e.qty<=0)state.cart.delete(id); renderCart(); }
+  function renderCart(){
+    const items=[...state.cart.values()];
+    const count=items.reduce((s,e)=>s+e.qty,0), total=items.reduce((s,e)=>s+e.qty*e.product.price,0);
+    const badge=document.getElementById('cart-count'); badge.textContent=count; badge.classList.toggle('show',count>0);
+    document.getElementById('cart-total').textContent=`${total.toLocaleString('ar')} ${CURRENCY}`;
+    document.getElementById('checkout').disabled=count===0;
+    const box=document.getElementById('cart-items');
+    if(!items.length){ box.innerHTML='<div class="cart-empty">السلة فارغة بعد.<br>انقر على أي منتج لإضافته.</div>'; return; }
+    box.innerHTML=items.map(e=>`<div class="cart-row">
+      <div class="cart-swatch" style="background:${hex(e.product.color)}"></div>
+      <div class="info"><b>${e.product.name}</b><span>${e.product.price.toLocaleString('ar')} ${CURRENCY}</span></div>
+      <div class="qty"><button data-dec="${e.product.id}">−</button><span>${e.qty}</span><button data-inc="${e.product.id}">+</button></div>
+    </div>`).join('');
+    box.querySelectorAll('[data-inc]').forEach(b=>b.onclick=()=>changeQty(b.dataset.inc,1));
+    box.querySelectorAll('[data-dec]').forEach(b=>b.onclick=()=>changeQty(b.dataset.dec,-1));
+  }
+  document.getElementById('open-cart').addEventListener('click', ()=>{ pauseWalk(); enterScreen.classList.add('hidden'); cartPanel.classList.add('open'); });
+  document.getElementById('close-cart').addEventListener('click', ()=>{ cartPanel.classList.remove('open'); promptResume(); });
+
+  const shop2d=document.getElementById('shop-2d');
+  (function buildGrid(){
+    document.getElementById('grid-2d').innerHTML=PRODUCTS.map(p=>`<div class="card">
+      <div class="thumb" style="background:linear-gradient(135deg,${hex(p.color)}33,${hex(p.color)}0a)"></div>
+      <div class="body"><h3>${p.name}</h3><div class="price">${p.price.toLocaleString('ar')} ${CURRENCY}</div>
+      <div class="d">${p.description}</div><button data-add="${p.id}">أضِف إلى السلة</button></div></div>`).join('');
+    document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{ addToCart(PRODUCTS.find(p=>p.id===b.dataset.add)); toast('أُضيف إلى السلة'); });
+  })();
+  document.getElementById('exit-3d').addEventListener('click', ()=>{ state.mode='2d'; pauseWalk(); enterScreen.classList.add('hidden'); shop2d.classList.add('active'); });
+  document.getElementById('back-3d').addEventListener('click', ()=>{ state.mode='3d'; shop2d.classList.remove('active'); enterScreen.classList.remove('hidden'); });
+
+  function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800); }
+
+  PRODUCTS.forEach(addStand);
+  renderCart();
+  animate();
+  </script>
+</body>
+</html>
