@@ -420,7 +420,7 @@
       const front=new THREE.MeshStandardMaterial({map:cardTexture(pr,sec.edge), roughness:.4});
       const plain=new THREE.MeshStandardMaterial({color:sec.edge, roughness:.5});
       const card=new THREE.Mesh(new THREE.BoxGeometry(0.5,0.6,0.06), [plain,plain,plain,plain,front,plain]);
-      card.position.set(0, ty+0.33, D/2-0.22); card.castShadow=true; card.userData.product=pr;
+      card.position.set(0, ty+0.33, D/2-0.22); card.castShadow=true; card.userData.product=pr; card.userData.section=sec;
       g.add(card); interactables.push(card); productMeshes[pr.id]=card;
     });
     const sign=new THREE.Mesh(new THREE.PlaneGeometry(W+0.2,0.7), new THREE.MeshBasicMaterial({map:labelTexture(sec.name,sec.edge)}));
@@ -473,7 +473,7 @@
     if(state.mode!=='3d') return;
     raycaster.setFromCamera(new THREE.Vector2((cx/innerWidth)*2-1, -(cy/innerHeight)*2+1), camera);
     const hit=raycaster.intersectObjects(interactables, true)[0];
-    if(hit) openProduct(hit.object.userData.product);
+    if(hit && hit.object.userData.section) openSection(hit.object.userData.section);
   }
 
   (function setupJoystick(){
@@ -532,7 +532,7 @@
         if(d<bd){ bd=d; best=p; } }
       if(best!==nearProduct){
         nearProduct=best;
-        if(best){ hint.innerHTML=`<b>${best.name}</b> · ${best.price} ${CURRENCY} — انقر للتفاصيل`; hint.classList.add('show'); }
+        if(best){ hint.innerHTML=`<b>${best.section}</b> — انقر لعرض المنتجات`; hint.classList.add('show'); }
         else hint.classList.remove('show');
       }
     }
@@ -561,6 +561,26 @@
     document.getElementById('pp-price').innerHTML=`${p.price.toLocaleString('ar')} <small>${CURRENCY}</small>`;
     document.getElementById('pp-desc').textContent=p.description;
     const b=document.getElementById('pp-add'); b.textContent='أضِف إلى السلة'; b.classList.remove('added');
+    productPanel.classList.add('open');
+  }
+
+  // [PATCH] section-panel: عرض كل منتجات القسم كقائمة في اللوحة اليمنى
+  function openSection(sec){
+    pauseWalk(); state.activeSection=sec;
+    document.getElementById('pp-index').textContent='قسم · ' + sec.products.length + ' منتجات';
+    document.getElementById('pp-name').textContent=sec.name;
+    document.getElementById('pp-price').style.display='none';
+    document.getElementById('pp-add').style.display='none';
+    const rows = sec.products.map(pr=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px;background:var(--surface-2);border-radius:12px;margin-bottom:10px">
+        <div style="flex:1;min-width:0"><b style="display:block;font-size:15px">${pr.name}</b><span style="font-size:13px;color:var(--brass)">${pr.price} ${CURRENCY}</span></div>
+        <button class="sec-add" data-id="${pr.id}" style="border:none;background:var(--brass);color:#1a1410;padding:9px 16px;border-radius:10px;font-size:13px;font-weight:700;flex-shrink:0">أضِف</button>
+      </div>`).join('');
+    const desc=document.getElementById('pp-desc'); desc.innerHTML=rows;
+    desc.querySelectorAll('.sec-add').forEach(b=>b.onclick=()=>{
+      const pr=sec.products.find(x=>x.id===b.dataset.id);
+      addToCart(pr); b.textContent='✓'; setTimeout(()=>b.textContent='أضِف',900);
+      toast('أُضيف «' + pr.name + '» إلى السلة');
+    });
     productPanel.classList.add('open');
   }
   function closeProduct(){ productPanel.classList.remove('open'); promptResume(); }
