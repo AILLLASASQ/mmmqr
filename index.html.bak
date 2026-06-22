@@ -277,43 +277,32 @@
   const loader = new GLTFLoader();
   let mixer = null, walkAction = null;
 
-  // [PATCH] character+walk: الجسم من character.glb + المشي من walk_animation2.glb
-  const CHARACTER_MESH = 'models/character.glb';
-  const WALK_CLIP      = 'models/walk_animation2.glb';
-  const TARGET_HEIGHT  = 1.7;   // ارتفاع تقريبي لضبط المقياس تلقائياً
+  // [PATCH] fox-single-file: الميش + المشي من نفس الملف (الثعلب) مع مقياس تلقائي
+  const CHARACTER     = 'models/walk_animation.glb';   // يحوي الميش + الأنميشن
+  const TARGET_HEIGHT = 1.6;                             // ارتفاع تقريبي — غيّره حسب رغبتك
 
-  function logGltf(tag, g){
-    let meshes = 0; g.scene.traverse(o => { if (o.isMesh) meshes++; });
-    const sz = new THREE.Vector3(); new THREE.Box3().setFromObject(g.scene).getSize(sz);
-    console.log(`[${tag}] ميش=${meshes} | الحجم=${sz.x.toFixed(2)},${sz.y.toFixed(2)},${sz.z.toFixed(2)} | أنميشن=`, g.animations.map(a => a.name));
-  }
+  loader.load(CHARACTER, (gltf) => {
+    const model = gltf.scene;
 
-  loader.load(CHARACTER_MESH, (charGltf) => {
-    logGltf('character', charGltf);
-    const model = charGltf.scene;
+    let meshes = 0; model.traverse(o => { if (o.isMesh) meshes++; });
+    console.log('[fox] ميش=' + meshes, '| أنميشن=', gltf.animations.map(a => a.name));
 
-    // مقياس تلقائي حسب الارتفاع + إنزال القدمين إلى الأرض
+    // الثعلب مُصدّر بمقياس ضخم → نضبطه تلقائياً + ننزل قدميه للأرض
     const sz = new THREE.Vector3(); new THREE.Box3().setFromObject(model).getSize(sz);
     if (sz.y > 0) model.scale.setScalar(TARGET_HEIGHT / sz.y);
-    const b2 = new THREE.Box3().setFromObject(model);
-    model.position.y -= b2.min.y;
+    const b = new THREE.Box3().setFromObject(model);
+    model.position.y -= b.min.y;
 
     model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
     player.add(model);
+
+    // اختيار أنميشن المشي بالاسم (Survey/Walk/Run)، وإلا الأطول/الأول كبديل
     mixer = new THREE.AnimationMixer(model);
-
-    const play = (clip) => { walkAction = mixer.clipAction(clip); walkAction.play(); };
-
-    if (charGltf.animations && charGltf.animations.length) {
-      play(charGltf.animations[0]);                 // أنميشن داخل ملف الشخصية
-    } else {
-      loader.load(WALK_CLIP, (walkGltf) => {        // أو من ملف المشي المنفصل
-        logGltf('walk', walkGltf);
-        if (walkGltf.animations.length) play(walkGltf.animations[0]);
-        else console.warn('⚠ walk_animation2.glb لا يحتوي أي clip.');
-      }, undefined, e => console.warn('تعذّر تحميل', WALK_CLIP, e));
-    }
-  }, undefined, e => console.warn('تعذّر تحميل', CHARACTER_MESH, e));
+    const clips = gltf.animations || [];
+    const walk = clips.find(c => /walk/i.test(c.name)) || clips[1] || clips[0];
+    if (walk) { walkAction = mixer.clipAction(walk); walkAction.play(); }
+    else console.warn('⚠ لا يوجد أي clip في', CHARACTER);
+  }, undefined, e => console.warn('تعذّر تحميل', CHARACTER, e));
 
   const interactables = [];
   const productMeshes = {};
