@@ -204,20 +204,22 @@
     ]},
   ];
 
-  // توزيع الأقسام على الجدارين
-  const _rightZ=[-10,0,10], _leftZ=[-6,6]; let _ri=0,_li=0;
-  SECTIONS.forEach(sec=>{
-    if(sec.side==='right'){ sec._pos=[7, _rightZ[_ri++]]; sec._side=1; }
-    else { sec._pos=[-7, _leftZ[_li++]]; sec._side=-1; }
-  });
-
-  // تسطيح المنتجات (يستخدمه باقي الكود: السلة/التلميح/الوضع 2D)
+  // [المرحلة 1] PRODUCTS تُملأ بعد جلب المشهد (انظر prepareData / loadScene بالأسفل)
   const PRODUCTS = [];
-  SECTIONS.forEach(sec=> sec.products.forEach(pr=>{
-    pr.color=sec.edge; pr.section=sec.name; pr.pos=sec._pos;
-    if(!pr.description) pr.description = sec.name + ' — ' + pr.name + '. بطاقة رقمية تُسلَّم فوراً بعد الدفع.';
-    PRODUCTS.push(pr);
-  }));
+  function prepareData(){
+    PRODUCTS.length = 0;
+    let ri=0, li=0;
+    SECTIONS.forEach(sec=>{
+      if(sec.side==='right'){ sec._pos=[7, -10 + ri*8]; sec._side=1; ri++; }
+      else { sec._pos=[-7, -6 + li*8]; sec._side=-1; li++; }
+      sec.products.forEach(pr=>{
+        pr.color = (pr.color!==undefined) ? pr.color : sec.edge;
+        pr.section = sec.name; pr.pos = sec._pos;
+        if(!pr.description) pr.description = sec.name + ' — ' + pr.name + '. بطاقة رقمية تُسلَّم فوراً بعد الدفع.';
+        PRODUCTS.push(pr);
+      });
+    });
+  }
 
   const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false };
   const STREET = { halfX:6.3, halfZ:24 };
@@ -613,20 +615,36 @@
   document.getElementById('close-cart').addEventListener('click', ()=>{ cartPanel.classList.remove('open'); promptResume(); });
 
   const shop2d=document.getElementById('shop-2d');
-  (function buildGrid(){
+  function buildGrid(){
     document.getElementById('grid-2d').innerHTML=PRODUCTS.map(p=>`<div class="card">
       <div class="thumb" style="background:linear-gradient(135deg,${hex(p.color)}33,${hex(p.color)}0a)"></div>
       <div class="body"><h3>${p.name}</h3><div class="price">${p.price.toLocaleString('ar')} ${CURRENCY}</div>
       <div class="d">${p.description}</div><button data-add="${p.id}">أضِف إلى السلة</button></div></div>`).join('');
     document.querySelectorAll('[data-add]').forEach(b=>b.onclick=()=>{ addToCart(PRODUCTS.find(p=>p.id===b.dataset.add)); toast('أُضيف إلى السلة'); });
-  })();
+  }
   document.getElementById('exit-3d').addEventListener('click', ()=>{ state.mode='2d'; pauseWalk(); enterScreen.classList.add('hidden'); shop2d.classList.add('active'); });
   document.getElementById('back-3d').addEventListener('click', ()=>{ state.mode='3d'; shop2d.classList.remove('active'); enterScreen.classList.remove('hidden'); });
 
   function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800); }
 
-  buildSections();
-  renderCart();
+  // [المرحلة 1] جلب المشهد من Firestore عبر الخادم (مع رجوع آمن للافتراضي) ثم البناء
+  async function loadScene(){
+    try{
+      const r = await fetch('/api/scene');
+      if(r.ok){
+        const data = await r.json();
+        if(data && Array.isArray(data.sections) && data.sections.length){
+          SECTIONS.length = 0; data.sections.forEach(sec=>SECTIONS.push(sec));
+          console.log('[scene] حُمِّل من الخادم:', data.sections.length, 'أقسام');
+        }
+      }
+    }catch(e){ console.warn('[scene] تعذّر الجلب — استخدام الافتراضي', e); }
+    prepareData();
+    buildSections();
+    buildGrid();
+    renderCart();
+  }
+  loadScene();
   animate();
   </script>
 </body>
