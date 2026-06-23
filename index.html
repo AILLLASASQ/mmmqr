@@ -225,7 +225,7 @@
   }
 
   const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false, admin:false };
-  const STREET = { halfX:42, halfZ:17 };   // [city] حدود أوسع للتجوّل داخل المدينة
+  const STREET = { minX:-58, maxX:26, minZ:-34, maxZ:2 };   // [city] حدود = حدود المدينة الفعلية
   const PLAYER = { speed:6, radius:0.5 };
 
   const canvas = document.getElementById('c');
@@ -336,7 +336,7 @@
   // [city] أعمدة الإنارة الافتراضية مُعطّلة — المدينة توفّر إنارتها. // buildLights();
 
   const player = new THREE.Group();
-  player.position.set(0,0,0); player.rotation.y = Math.PI;   // [city] البداية وسط المدينة
+  player.position.set(-16,0,-16); player.rotation.y = Math.PI;   // [city] البداية وسط المدينة الفعلي
   scene.add(player);
 
   const loader = new GLTFLoader();
@@ -510,8 +510,8 @@
   })();
 
   function collide(pos){
-    pos.x=Math.max(-STREET.halfX,Math.min(STREET.halfX,pos.x));
-    pos.z=Math.max(-STREET.halfZ,Math.min(STREET.halfZ,pos.z));
+    pos.x=Math.max(STREET.minX,Math.min(STREET.maxX,pos.x));
+    pos.z=Math.max(STREET.minZ,Math.min(STREET.maxZ,pos.z));
     // [wall-shelves] المنتجات مرتفعة على الجدران — لا تصادم أرضي معها
     for(const b of buildingBoxes.concat(shelfBoxes)){
       if(pos.x>b.minX-PLAYER.radius&&pos.x<b.maxX+PLAYER.radius&&pos.z>b.minZ-PLAYER.radius&&pos.z<b.maxZ+PLAYER.radius){
@@ -865,8 +865,8 @@
     const ed = editDrag.target; if(!ed) return;
     raycaster.setFromCamera(_ndc(e), camera);
     if(!raycaster.ray.intersectPlane(_groundPlane, _gpHit)) return;
-    const x = Math.max(-STREET.halfX-2, Math.min(STREET.halfX+2, _gpHit.x));
-    const z = Math.max(-STREET.halfZ, Math.min(STREET.halfZ, _gpHit.z));
+    const x = Math.max(STREET.minX-2, Math.min(STREET.maxX+2, _gpHit.x));
+    const z = Math.max(STREET.minZ, Math.min(STREET.maxZ, _gpHit.z));
     ed.group.position.x = x; ed.group.position.z = z;
     ed.ref.x = x; ed.ref.z = z;
     if(ed.type==='section') ed.ref._pos = [x, z];
