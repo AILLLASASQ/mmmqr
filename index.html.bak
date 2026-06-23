@@ -117,6 +117,7 @@
     <div class="actions">
       <button class="btn cart-toggle" id="open-cart">السلة<span class="cart-count" id="cart-count">0</span></button>
       <button class="btn btn-exit" id="exit-3d">⤢ الخروج تعبت امشي</button>
+      <button class="btn" id="admin-toggle" title="دخول المالك" style="align-self:flex-end;margin-top:4px">🔧</button>
     </div>
   </div>
 
@@ -210,8 +211,10 @@
     PRODUCTS.length = 0;
     let ri=0, li=0;
     SECTIONS.forEach(sec=>{
-      if(sec.side==='right'){ sec._pos=[7, -10 + ri*8]; sec._side=1; ri++; }
-      else { sec._pos=[-7, -6 + li*8]; sec._side=-1; li++; }
+      sec._side = (sec.side==='right') ? 1 : -1;
+      if(typeof sec.x==='number' && typeof sec.z==='number'){ sec._pos=[sec.x, sec.z]; }
+      else if(sec.side==='right'){ sec._pos=[7, -10 + ri*8]; ri++; }
+      else { sec._pos=[-7, -6 + li*8]; li++; }
       sec.products.forEach(pr=>{
         pr.color = (pr.color!==undefined) ? pr.color : sec.edge;
         pr.section = sec.name; pr.pos = sec._pos;
@@ -221,13 +224,13 @@
     });
   }
 
-  const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false };
-  const STREET = { halfX:6.3, halfZ:24 };
+  const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false, admin:false };
+  const STREET = { halfX:45, halfZ:20 };   // [city] حدود أوسع للتجوّل داخل المدينة
   const PLAYER = { speed:6, radius:0.5 };
 
   const canvas = document.getElementById('c');
   const scene  = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x9fb0bd, 22, 70);
+  scene.fog = new THREE.Fog(0x9fb0bd, 60, 220);   // [city] ضباب أبعد
 
   const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 300);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
@@ -277,6 +280,7 @@
   }
   const tints=['#6e6a73','#7a6a5e','#5e6b6e','#7d7468','#675f6b','#73685f'];
   const buildingBoxes=[];
+  const buildingGroups=[];
   // [PATCH] house-shape: بيت بالكود (جسم بنوافذ + سقف هرمي + باب)
   function addBuilding(x,z,w,d,h,tint){
     const g=new THREE.Group(); g.position.set(x,0,z);
@@ -300,15 +304,24 @@
     door.position.set(side*(w/2+0.02), 0.9, 0); door.rotation.y=Math.PI/2; g.add(door);
 
     scene.add(g);
+    buildingGroups.push(g);
     buildingBoxes.push({minX:x-w/2,maxX:x+w/2,minZ:z-d/2,maxZ:z+d/2});
   }
-  (function buildCity(){
+  // [المرحلة 2-أ] المباني صارت بيانات مخزّنة (قابلة للحفظ) بدل العشوائية وقت التشغيل
+  const BUILDINGS = [];
+  function genDefaultBuildings(){
+    BUILDINGS.length = 0;
     for(let z=-STREET.halfZ; z<=STREET.halfZ; z+=6.5){
       if(Math.random()<0.12) continue;
       const h1=6+Math.random()*11, h2=6+Math.random()*11;
-      addBuilding(-10-Math.random()*1.5, z, 4+Math.random()*2, 5, h1, tints[(Math.random()*tints.length)|0]);
-      addBuilding( 10+Math.random()*1.5, z, 4+Math.random()*2, 5, h2, tints[(Math.random()*tints.length)|0]);
+      BUILDINGS.push({ x:-10-Math.random()*1.5, z, w:4+Math.random()*2, d:5, h:h1, tint:tints[(Math.random()*tints.length)|0] });
+      BUILDINGS.push({ x: 10+Math.random()*1.5, z, w:4+Math.random()*2, d:5, h:h2, tint:tints[(Math.random()*tints.length)|0] });
     }
+  }
+  // [city] البيوت المرسومة مخفية (المدينة الخارجية توفّر المباني). غيّر SHOW_CODE_BUILDINGS=true لإظهارها.
+  const SHOW_CODE_BUILDINGS = false;
+  function buildBuildings(){ if(!SHOW_CODE_BUILDINGS) return; BUILDINGS.forEach(b=>{ addBuilding(b.x, b.z, b.w, b.d, b.h, b.tint); const g=buildingGroups[buildingGroups.length-1]; if(g){ g.rotation.y=(b.rot||0); g.scale.setScalar(b.scale||1); g.userData.editable={type:'building', ref:b, group:g}; } }); }
+  function buildLights(){
     for(let z=-18; z<=18; z+=12){
       [-6.6,6.6].forEach(x=>{
         const pole=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.06,3.2,8),
@@ -319,7 +332,8 @@
         bulb.position.set(x,3.3,z); scene.add(bulb);
       });
     }
-  })();
+  }
+  buildLights();
 
   const player = new THREE.Group();
   player.position.set(0,0,18); player.rotation.y = Math.PI;
@@ -386,6 +400,7 @@
   }
   // [PATCH] sections: وحدة رفوف (جندولة) لكل قسم + لافتة + بطاقات منتجاته
   const shelfBoxes = [];
+  const sectionGroups = [];
   function labelTexture(text, color){
     const c=document.createElement('canvas'); c.width=512; c.height=128; const x=c.getContext('2d');
     x.fillStyle='#'+color.toString(16).padStart(6,'0'); x.fillRect(0,0,512,128);
@@ -404,7 +419,7 @@
   }
   function buildSection(sec){
     const [x,z]=sec._pos, side=sec._side;
-    const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=-side*Math.PI/2;
+    const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=-side*Math.PI/2 + (sec.rot||0); g.scale.setScalar(sec.scale||1);
     const W=2.4, D=1.0, n=sec.products.length, tier=0.7, baseH=0.35, top=0.55;
     const H=baseH + n*tier + top;
     const metal=new THREE.MeshStandardMaterial({color:0xe9e9ec, roughness:.55, metalness:.15});
@@ -428,7 +443,7 @@
     const sign=new THREE.Mesh(new THREE.PlaneGeometry(W+0.2,0.7), new THREE.MeshBasicMaterial({map:labelTexture(sec.name,sec.edge)}));
     sign.position.set(0, H+0.45, D/2-0.02); g.add(sign);
 
-    scene.add(g);
+    scene.add(g); sectionGroups.push(g); g.userData.editable={type:'section', ref:sec, group:g};
     g.updateWorldMatrix(true,true);
     const bb=new THREE.Box3().setFromObject(g);
     shelfBoxes.push({minX:bb.min.x,maxX:bb.max.x,minZ:bb.min.z,maxZ:bb.max.z});
@@ -454,10 +469,12 @@
   let drag=false, lastX=0, lastY=0, moved=false, dragId=null;
   canvas.addEventListener('pointerdown', e=>{
     if(!state.active) return;
+    if(state.admin && editPickStart(e)){ dragId=e.pointerId; canvas.setPointerCapture(e.pointerId); return; }
     drag=true; moved=false; dragId=e.pointerId; lastX=e.clientX; lastY=e.clientY;
     canvas.setPointerCapture(e.pointerId);
   });
   canvas.addEventListener('pointermove', e=>{
+    if(editDrag.active && e.pointerId===dragId){ editDragMove(e); return; }
     if(!drag || e.pointerId!==dragId) return;
     const dx=e.clientX-lastX, dy=e.clientY-lastY; lastX=e.clientX; lastY=e.clientY;
     if(Math.abs(dx)+Math.abs(dy)>4) moved=true;
@@ -465,7 +482,9 @@
     cam.pitch  = Math.max(0.12, Math.min(1.1, cam.pitch - dy*0.005));
   });
   canvas.addEventListener('pointerup', e=>{
+    if(editDrag.active && e.pointerId===dragId){ editDragEnd(); drag=false; dragId=null; return; }
     if(e.pointerId!==dragId) return;
+    if(state.admin){ if(!moved) clearEditSelection(); drag=false; dragId=null; return; }
     if(!moved) selectAt(e.clientX, e.clientY);
     drag=false; dragId=null;
   });
@@ -627,22 +646,281 @@
 
   function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1800); }
 
+  // ===== [المرحلة 2-أ] دخول المالك (مرة واحدة) =====
+  // السر يُحفظ في sessionStorage (للجلسة فقط) ويُرسل لاحقاً في ترويسة x-admin-token.
+  // الحارس الحقيقي في الخادم (ADMIN_TOKEN) — إخفاء الأدوات في الواجهة للراحة فقط.
+  const ADMIN_KEY = 'tr_admin_token';
+
+  async function verifyToken(token){
+    try{
+      const r = await fetch('/api/admin/check', { method:'POST',
+        headers:{ 'Content-Type':'application/json', 'x-admin-token': token } });
+      return r.ok;
+    }catch(e){ return false; }
+  }
+
+  function setAdminUI(on){
+    state.admin = on;
+    const btn = document.getElementById('admin-toggle');
+    if(btn){
+      btn.textContent = on ? '🔧 مالك' : '🔧';
+      btn.style.borderColor = on ? 'var(--ok)' : '';
+      btn.style.color = on ? 'var(--ok)' : '';
+    }
+    if(typeof renderEditor==='function') renderEditor();
+  }
+
+  async function adminLogin(){
+    if(state.admin){
+      sessionStorage.removeItem(ADMIN_KEY); setAdminUI(false); toast('خرجت من وضع المالك'); return;
+    }
+    const token = prompt('أدخل سر المالك:');
+    if(!token) return;
+    toast('جارٍ التحقق…');
+    const ok = await verifyToken(token);
+    if(ok){ sessionStorage.setItem(ADMIN_KEY, token); setAdminUI(true); toast('أهلاً بك أيها المالك ✓'); }
+    else { toast('سر غير صحيح'); }
+  }
+
+  (async function restoreAdmin(){
+    const saved = sessionStorage.getItem(ADMIN_KEY);
+    if(saved && await verifyToken(saved)) setAdminUI(true);
+    else sessionStorage.removeItem(ADMIN_KEY);
+  })();
+
+  const _adminBtn = document.getElementById('admin-toggle');
+  if(_adminBtn) _adminBtn.addEventListener('click', adminLogin);
+
+  // ===== [المرحلة 2-أ] إعادة بناء المشهد (تمسح القديم وتبني من SECTIONS/BUILDINGS) =====
+  function _clearGroups(arr){ arr.forEach(g=>scene.remove(g)); arr.length=0; }
+  function rebuildScene(){
+    if(typeof clearEditSelection==='function') clearEditSelection();
+    _clearGroups(sectionGroups);
+    _clearGroups(buildingGroups);
+    interactables.length = 0;
+    for(const k in productMeshes) delete productMeshes[k];
+    shelfBoxes.length = 0;
+    buildingBoxes.length = 0;
+    prepareData();
+    buildSections();
+    buildBuildings();
+    buildGrid();
+    renderCart();
+  }
+
+  // ===== [المرحلة 2-أ] لوحة تحرير المالك =====
+  const editorEl = document.createElement('div');
+  editorEl.id = 'editor';
+  editorEl.style.cssText = 'position:fixed;top:70px;right:14px;z-index:55;width:300px;max-height:78vh;'
+    + 'overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;'
+    + 'padding:16px;display:none;font-size:13px;box-shadow:0 10px 40px rgba(0,0,0,.5)';
+  document.body.appendChild(editorEl);
+
+  function _uid(p){ return p + Math.random().toString(36).slice(2,7); }
+
+  function renderEditor(){
+    if(!state.admin){ editorEl.style.display='none'; return; }
+    editorEl.style.display='block';
+    let h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+      + '<b style="font-size:15px">🛠 محرّر المتجر</b>'
+      + '<button id="ed-save" style="border:none;background:var(--ok);color:#0f140c;padding:8px 14px;border-radius:9px;font-weight:700">💾 حفظ</button></div>';
+    if(selectedEdit){
+      const tname = selectedEdit.type==='section' ? ('قسم: '+(selectedEdit.ref.name||'')) : 'مبنى';
+      h += '<div style="background:var(--brass-soft);border:1px solid var(--brass);border-radius:10px;padding:10px;margin-bottom:12px">'
+        + '<div style="color:var(--brass);margin-bottom:8px">المحدّد · '+tname+'</div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+        + '<button data-ed="rotL" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">↺</button>'
+        + '<button data-ed="rotR" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">↻</button>'
+        + '<button data-ed="sUp" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">＋</button>'
+        + '<button data-ed="sDn" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">－</button>'
+        + '<button data-ed="del" style="flex:1;border:1px solid #c0392b;background:#0000;color:#c0392b;padding:8px;border-radius:8px">🗑</button>'
+        + '</div></div>';
+    }
+    h += '<div style="color:var(--brass);margin:6px 0 8px">الأقسام</div>';
+    SECTIONS.forEach((sec,si)=>{
+      h += '<div style="background:var(--surface-2);border-radius:10px;padding:10px;margin-bottom:8px">'
+        + '<div style="display:flex;justify-content:space-between;align-items:center">'
+        + '<b>'+sec.name+'</b>'
+        + '<button data-delsec="'+si+'" style="border:none;background:#0000;color:#c0392b;font-size:16px">🗑</button></div>'
+        + '<div style="color:var(--muted);font-size:11px;margin:4px 0">'+(sec.side==='right'?'يمين':'يسار')+' · '+sec.products.length+' منتجات</div>';
+      sec.products.forEach((pr,pi)=>{
+        h += '<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-top:1px solid var(--line)">'
+          + '<span>'+pr.name+' · '+pr.price+'</span>'
+          + '<button data-delprod="'+si+':'+pi+'" style="border:none;background:#0000;color:#c0392b">✕</button></div>';
+      });
+      h += '<button data-addprod="'+si+'" style="width:100%;margin-top:6px;border:1px dashed var(--line);background:#0000;color:var(--ink);padding:6px;border-radius:8px">+ منتج</button></div>';
+    });
+    h += '<button id="ed-addsec" style="width:100%;border:1px dashed var(--brass);background:#0000;color:var(--brass);padding:8px;border-radius:8px;margin-bottom:14px">+ قسم جديد</button>';
+    h += '<div style="color:var(--brass);margin:6px 0 8px">المباني ('+BUILDINGS.length+')</div>';
+    h += '<button id="ed-addbld" style="width:100%;border:1px dashed var(--brass);background:#0000;color:var(--brass);padding:8px;border-radius:8px">+ مبنى</button>';
+    editorEl.innerHTML = h;
+    _wireEditor();
+  }
+
+  function _wireEditor(){
+    editorEl.querySelector('#ed-save').onclick = saveScene;
+    editorEl.querySelector('#ed-addsec').onclick = _addSectionUI;
+    editorEl.querySelector('#ed-addbld').onclick = _addBuildingUI;
+    editorEl.querySelectorAll('[data-delsec]').forEach(b=> b.onclick=()=>{ SECTIONS.splice(+b.dataset.delsec,1); rebuildScene(); renderEditor(); });
+    editorEl.querySelectorAll('[data-addprod]').forEach(b=> b.onclick=()=> _addProductUI(+b.dataset.addprod));
+    editorEl.querySelectorAll('[data-delprod]').forEach(b=> b.onclick=()=>{ const a=b.dataset.delprod.split(':'); SECTIONS[+a[0]].products.splice(+a[1],1); rebuildScene(); renderEditor(); });
+    editorEl.querySelectorAll('[data-ed]').forEach(b=> b.onclick=()=> _editAction(b.dataset.ed));
+  }
+
+  function _addSectionUI(){
+    const name = prompt('اسم القسم:'); if(!name) return;
+    const side = confirm('موافق = يمين الشارع · إلغاء = يسار') ? 'right' : 'left';
+    const c = (prompt('لون القسم (hex مثل 2d6cdf):','2d6cdf')||'2d6cdf').replace('#','');
+    SECTIONS.push({ id:_uid('sec'), name, side, edge:(parseInt(c,16)||0x2d6cdf), products:[] });
+    rebuildScene(); renderEditor(); toast('أُضيف القسم');
+  }
+  function _addProductUI(si){
+    const name = prompt('اسم المنتج:'); if(!name) return;
+    const price = parseFloat(prompt('السعر:','10'))||0;
+    SECTIONS[si].products.push({ id:_uid('p'), name, price });
+    rebuildScene(); renderEditor(); toast('أُضيف المنتج');
+  }
+  function _addBuildingUI(){
+    const side = confirm('موافق = يمين الشارع · إلغاء = يسار') ? 1 : -1;
+    BUILDINGS.push({ x: side*(10+Math.random()*1.5), z:(Math.random()*2-1)*18, w:5, d:5, h:8, tint:tints[(Math.random()*tints.length)|0] });
+    rebuildScene(); renderEditor(); toast('أُضيف مبنى');
+  }
+
+  async function saveScene(){
+    const token = sessionStorage.getItem(ADMIN_KEY);
+    if(!token){ toast('سجّل الدخول كمالك أولاً'); return; }
+    const cleanSections = SECTIONS.map(sec=>({
+      id: sec.id, name: sec.name, side: sec.side, edge: sec.edge,
+      x: sec._pos ? sec._pos[0] : undefined,
+      z: sec._pos ? sec._pos[1] : undefined,
+      rot: sec.rot || 0, scale: sec.scale || 1,
+      products: sec.products.map(pr=>({ id: pr.id, name: pr.name, price: pr.price }))
+    }));
+    const cleanBuildings = BUILDINGS.map(b=>({ x:b.x, z:b.z, w:b.w, d:b.d, h:b.h, tint:b.tint, rot:b.rot||0, scale:b.scale||1 }));
+    toast('جارٍ الحفظ…');
+    try{
+      const r = await fetch('/api/admin/save', { method:'POST',
+        headers:{ 'Content-Type':'application/json', 'x-admin-token': token },
+        body: JSON.stringify({ layout:{ sections:cleanSections, buildings:cleanBuildings } }) });
+      if(r.ok) toast('تم الحفظ ✓ — يراه الزوّار الآن');
+      else if(r.status===401){ toast('انتهت صلاحية الدخول'); setAdminUI(false); }
+      else toast('فشل الحفظ');
+    }catch(e){ toast('خطأ في الاتصال'); }
+  }
+
+  // ===== [المرحلة 2-ب-1] تحديد العناصر وسحبها (للمالك) =====
+  let selectedEdit = null;
+  const editDrag = { active:false, target:null };
+  let _hl = null;
+  const _groundPlane = new THREE.Plane(new THREE.Vector3(0,1,0), 0);
+  const _gpHit = new THREE.Vector3();
+
+  function _ndc(e){ return new THREE.Vector2((e.clientX/innerWidth)*2-1, -(e.clientY/innerHeight)*2+1); }
+
+  function _placeHighlight(group){
+    if(!_hl){ _hl = new THREE.BoxHelper(group, 0xC9A24B); scene.add(_hl); }
+    _hl.setFromObject(group); _hl.visible = true;
+  }
+  function selectEdit(ed){
+    selectedEdit = ed; _placeHighlight(ed.group);
+    if(typeof renderEditor==='function') renderEditor();
+  }
+  function clearEditSelection(){
+    selectedEdit = null; if(_hl) _hl.visible = false;
+    if(typeof renderEditor==='function') renderEditor();
+  }
+
+  function editPickStart(e){
+    raycaster.setFromCamera(_ndc(e), camera);
+    const groups = sectionGroups.concat(buildingGroups);
+    const hit = raycaster.intersectObjects(groups, true)[0];
+    if(!hit) return false;
+    let o = hit.object; while(o && !o.userData.editable) o = o.parent;
+    if(!o) return false;
+    selectEdit(o.userData.editable);
+    editDrag.active = true; editDrag.target = o.userData.editable;
+    return true;
+  }
+  function editDragMove(e){
+    const ed = editDrag.target; if(!ed) return;
+    raycaster.setFromCamera(_ndc(e), camera);
+    if(!raycaster.ray.intersectPlane(_groundPlane, _gpHit)) return;
+    const x = Math.max(-STREET.halfX-2, Math.min(STREET.halfX+2, _gpHit.x));
+    const z = Math.max(-STREET.halfZ, Math.min(STREET.halfZ, _gpHit.z));
+    ed.group.position.x = x; ed.group.position.z = z;
+    ed.ref.x = x; ed.ref.z = z;
+    if(ed.type==='section') ed.ref._pos = [x, z];
+    if(_hl) _hl.setFromObject(ed.group);
+  }
+  function editDragEnd(){ editDrag.active = false; editDrag.target = null; }
+
+  // ===== [المرحلة 2-ب-2] تدوير/تكبير/حذف العنصر المحدّد =====
+  function _applyTransform(ed){
+    const g = ed.group;
+    if(ed.type==='section'){
+      g.rotation.y = -ed.ref._side*Math.PI/2 + (ed.ref.rot||0);
+    } else {
+      g.rotation.y = (ed.ref.rot||0);
+    }
+    g.scale.setScalar(ed.ref.scale||1);
+    if(_hl) _hl.setFromObject(g);
+  }
+  function _editAction(a){
+    const ed = selectedEdit; if(!ed) return;
+    const r = ed.ref;
+    if(a==='rotL'){ r.rot = (r.rot||0) + Math.PI/12; _applyTransform(ed); }
+    else if(a==='rotR'){ r.rot = (r.rot||0) - Math.PI/12; _applyTransform(ed); }
+    else if(a==='sUp'){ r.scale = Math.min(3, (r.scale||1)*1.1); _applyTransform(ed); }
+    else if(a==='sDn'){ r.scale = Math.max(0.3, (r.scale||1)/1.1); _applyTransform(ed); }
+    else if(a==='del'){
+      if(ed.type==='section'){ const i=SECTIONS.indexOf(r); if(i>=0) SECTIONS.splice(i,1); }
+      else { const i=BUILDINGS.indexOf(r); if(i>=0) BUILDINGS.splice(i,1); }
+      clearEditSelection(); rebuildScene(); renderEditor(); toast('حُذف'); return;
+    }
+  }
+
+  // ===== [city] تحميل مدينة CCity Building Set 1 (الكاتب: Neberkenezer — رخصة CC-BY) =====
+  console.log('City model: "CCity Building Set 1" by Neberkenezer (Sketchfab) — CC-BY.');
+  const CITY_FILE  = 'models/city.glb';
+  const CITY_SCALE = 0.0015;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
+  const CITY_X = 0, CITY_Y = 0, CITY_Z = 0;   // إزاحة المدينة
+  const CITY_ROT = 0;        // تدوير المدينة (راديان، مثلاً Math.PI/2)
+  let cityGroup = null;
+  function loadCity(){
+    loader.load(CITY_FILE, (gltf)=>{
+      const m = gltf.scene;
+      const box = new THREE.Box3().setFromObject(m); const size = new THREE.Vector3(); box.getSize(size);
+      console.log('[city] الحجم الأصلي ≈ X:'+size.x.toFixed(1)+' Y:'+size.y.toFixed(1)+' Z:'+size.z.toFixed(1)
+        + ' | إن كان ضخماً جرّب CITY_SCALE أصغر، وإن كان صغيراً جرّبه أكبر.');
+      m.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });
+      m.scale.setScalar(CITY_SCALE);
+      m.rotation.y = CITY_ROT;
+      m.position.set(CITY_X, CITY_Y, CITY_Z);
+      scene.add(m); cityGroup = m;
+      console.log('[city] حُمِّلت المدينة. اضبط CITY_SCALE/CITY_Y حتى تقف الشخصية على الشارع.');
+    }, undefined, e=> console.warn('[city] تعذّر تحميل', CITY_FILE, e));
+  }
+  loadCity();
+
   // [المرحلة 1] جلب المشهد من Firestore عبر الخادم (مع رجوع آمن للافتراضي) ثم البناء
   async function loadScene(){
+    let loadedBuildings = false;
     try{
       const r = await fetch('/api/scene');
       if(r.ok){
         const data = await r.json();
         if(data && Array.isArray(data.sections) && data.sections.length){
           SECTIONS.length = 0; data.sections.forEach(sec=>SECTIONS.push(sec));
-          console.log('[scene] حُمِّل من الخادم:', data.sections.length, 'أقسام');
         }
+        if(data && Array.isArray(data.buildings)){
+          BUILDINGS.length = 0; data.buildings.forEach(b=>BUILDINGS.push(b)); loadedBuildings = true;
+        }
+        console.log('[scene] حُمِّل من الخادم');
       }
     }catch(e){ console.warn('[scene] تعذّر الجلب — استخدام الافتراضي', e); }
-    prepareData();
-    buildSections();
-    buildGrid();
-    renderCart();
+    if(!loadedBuildings) genDefaultBuildings();
+    rebuildScene();
+    renderEditor();
   }
   loadScene();
   animate();

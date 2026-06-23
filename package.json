@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "express": "^4.19.2",
+    "fbx2gltf": "^0.9.7-p1",
     "firebase-admin": "^14.0.0"
   }
 }
