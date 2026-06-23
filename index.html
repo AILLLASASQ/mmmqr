@@ -225,7 +225,7 @@
   }
 
   const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false, admin:false };
-  const STREET = { halfX:40, halfZ:40 };   // [city] حدود أوسع للتجوّل داخل المدينة
+  const STREET = { halfX:45, halfZ:20 };   // [city] حدود أوسع للتجوّل داخل المدينة
   const PLAYER = { speed:6, radius:0.5 };
 
   const canvas = document.getElementById('c');
@@ -882,7 +882,7 @@
   // ===== [city] تحميل مدينة CCity Building Set 1 (الكاتب: Neberkenezer — رخصة CC-BY) =====
   console.log('City model: "CCity Building Set 1" by Neberkenezer (Sketchfab) — CC-BY.');
   const CITY_FILE  = 'models/city.glb';
-  const CITY_SCALE = 0.05;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
+  const CITY_SCALE = 0.0015;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
   const CITY_X = 0, CITY_Y = 0, CITY_Z = 0;   // إزاحة المدينة
   const CITY_ROT = 0;        // تدوير المدينة (راديان، مثلاً Math.PI/2)
   let cityGroup = null;
