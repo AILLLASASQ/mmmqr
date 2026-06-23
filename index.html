@@ -173,6 +173,7 @@
   <script type="module">
   import * as THREE from 'three';
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
   const CURRENCY = 'ر.س';
   // [PATCH] sections — أقسام نموذجية (غيّر الأسماء/الأسعار/المنتجات كما تشاء)
@@ -340,6 +341,10 @@
   scene.add(player);
 
   const loader = new GLTFLoader();
+  // [draco] فاكّ ضغط الهندسة (مطلوب للملفات المضغوطة بـDraco)
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/libs/draco/');
+  loader.setDRACOLoader(dracoLoader);
   let mixer = null, walkAction = null;
 
   // [PATCH] character-mesh+walk-clip: الجسم من character.glb + المشي من walk_animation2.glb (بلا ثعلب)
