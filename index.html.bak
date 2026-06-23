@@ -173,6 +173,7 @@
   <script type="module">
   import * as THREE from 'three';
   import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+  import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 
   const CURRENCY = 'ر.س';
   // [PATCH] sections — أقسام نموذجية (غيّر الأسماء/الأسعار/المنتجات كما تشاء)
@@ -225,7 +226,7 @@
   }
 
   const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false, admin:false };
-  const STREET = { halfX:45, halfZ:20 };   // [city] حدود أوسع للتجوّل داخل المدينة
+  const STREET = { minX:-58, maxX:26, minZ:-34, maxZ:2 };   // [city] حدود = حدود المدينة الفعلية
   const PLAYER = { speed:6, radius:0.5 };
 
   const canvas = document.getElementById('c');
@@ -260,12 +261,12 @@
   sun.shadow.camera.left=-30; sun.shadow.camera.right=30; sun.shadow.camera.top=30; sun.shadow.camera.bottom=-30;
   sun.shadow.bias=-0.0004; scene.add(sun);
 
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120,120),
-    new THREE.MeshStandardMaterial({color:0x2b2723, roughness:1}));
-  ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
-  const sidewalkMat=new THREE.MeshStandardMaterial({color:0x3b362f, roughness:1});
-  [-7.5,7.5].forEach(x=>{ const s=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.2,STREET.halfZ*2+8),sidewalkMat);
-    s.position.set(x,0.1,0); s.receiveShadow=true; scene.add(s); });
+  // [city] أُزيلت الأرض والأرصفة الافتراضية — المدينة هي البيئة الحقيقية.
+  // أرض أمان غير مرئية: مرجع احتياطي لو فشل إسقاط الشخصية على سطح المدينة.
+  const SAFETY_Y = 0;
+  const safetyFloor = new THREE.Mesh(new THREE.PlaneGeometry(400,400),
+    new THREE.MeshBasicMaterial({visible:false}));
+  safetyFloor.rotation.x=-Math.PI/2; safetyFloor.position.y=SAFETY_Y; scene.add(safetyFloor);
 
   function facadeTexture(base){
     const cv=document.createElement('canvas'); cv.width=128; cv.height=128; const x=cv.getContext('2d');
@@ -333,13 +334,17 @@
       });
     }
   }
-  buildLights();
+  // [city] أعمدة الإنارة الافتراضية مُعطّلة — المدينة توفّر إنارتها. // buildLights();
 
   const player = new THREE.Group();
-  player.position.set(0,0,18); player.rotation.y = Math.PI;
+  player.position.set(-16,0,-16); player.rotation.y = Math.PI;   // [city] البداية وسط المدينة الفعلي
   scene.add(player);
 
   const loader = new GLTFLoader();
+  // [draco] فاكّ ضغط الهندسة (مطلوب للملفات المضغوطة بـDraco)
+  const dracoLoader = new DRACOLoader();
+  dracoLoader.setDecoderPath('https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/libs/draco/');
+  loader.setDRACOLoader(dracoLoader);
   let mixer = null, walkAction = null;
 
   // [PATCH] character-mesh+walk-clip: الجسم من character.glb + المشي من walk_animation2.glb (بلا ثعلب)
@@ -371,18 +376,27 @@
       console.log('[walk] clip=' + clip.name + ' | مسارات مرتبطة=' + bound + '/' + clip.tracks.length);
       if (bound === 0) console.warn('⚠ هيكل العظام غير متطابق: أنميشن ' + WALK_FILE + ' لا يناسب ' + CHARACTER_MESH + ' (ستقف الشخصية بلا حركة).');
       walkAction = mixer.clipAction(clip); walkAction.play();
+      // [fix] قدّم الأنميشن قليلاً ثم جمّده على إطار مشي طبيعي (بدل T-pose عند الوقوف)
+      walkAction.time = 0.3; mixer.update(0); walkAction.paused = true;
     };
 
-    loader.load(WALK_FILE, (walkGltf) => {
-      const clips = walkGltf.animations || [];
+    // [perf] الجسم والأنميشن في نفس الملف — لا نُنزّله مرّتين.
+    if (WALK_FILE === CHARACTER_MESH) {
+      const clips = charGltf.animations || [];
       const walk = clips.find(c => /walk/i.test(c.name)) || clips[1] || clips[0];
-      if (walk) applyWalk(walk);
-      else if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
-      else console.warn('⚠ لا يوجد أي clip للمشي.');
-    }, undefined, e => {
-      console.warn('تعذّر تحميل', WALK_FILE, e);
-      if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
-    });
+      if (walk) applyWalk(walk); else console.warn('⚠ لا يوجد clip للمشي في الملف.');
+    } else {
+      loader.load(WALK_FILE, (walkGltf) => {
+        const clips = walkGltf.animations || [];
+        const walk = clips.find(c => /walk/i.test(c.name)) || clips[1] || clips[0];
+        if (walk) applyWalk(walk);
+        else if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
+        else console.warn('⚠ لا يوجد أي clip للمشي.');
+      }, undefined, e => {
+        console.warn('تعذّر تحميل', WALK_FILE, e);
+        if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
+      });
+    }
   }, undefined, e => console.warn('تعذّر تحميل', CHARACTER_MESH, e));
 
   const interactables = [];
@@ -510,8 +524,8 @@
   })();
 
   function collide(pos){
-    pos.x=Math.max(-STREET.halfX,Math.min(STREET.halfX,pos.x));
-    pos.z=Math.max(-STREET.halfZ,Math.min(STREET.halfZ,pos.z));
+    pos.x=Math.max(STREET.minX,Math.min(STREET.maxX,pos.x));
+    pos.z=Math.max(STREET.minZ,Math.min(STREET.maxZ,pos.z));
     // [wall-shelves] المنتجات مرتفعة على الجدران — لا تصادم أرضي معها
     for(const b of buildingBoxes.concat(shelfBoxes)){
       if(pos.x>b.minX-PLAYER.radius&&pos.x<b.maxX+PLAYER.radius&&pos.z>b.minZ-PLAYER.radius&&pos.z<b.maxZ+PLAYER.radius){
@@ -523,6 +537,24 @@
   const forwardV=new THREE.Vector3(), rightV=new THREE.Vector3(), moveV=new THREE.Vector3(), up=new THREE.Vector3(0,1,0);
   const hint=document.getElementById('hint'); let nearProduct=null;
   const clock=new THREE.Clock(); let walkPhase=0;
+
+  // ===== [city] إسقاط الشخصية على سطح المدينة (raycast لأسفل) =====
+  const _downRay = new THREE.Raycaster();
+  const _downOrigin = new THREE.Vector3();
+  const _downDir = new THREE.Vector3(0,-1,0);
+  const CITY_PROBE_UP = 50;   // ارتفاع بدء الشعاع فوق الشخصية
+  let _groundedOnce = false;
+  function groundPlayer(){
+    if(!cityGroup){ return; }   // لا تُسقطها قبل تحميل المدينة
+    // ابدأ الشعاع من ارتفاع ثابت عالٍ فوق المدينة مهما كان موضع الشخصية
+    _downOrigin.set(player.position.x, 500, player.position.z);
+    _downRay.set(_downOrigin, _downDir);
+    _downRay.far = 2000;
+    const hits = _downRay.intersectObject(cityGroup, true);
+    if(hits.length){ if(!_groundedOnce) console.log('[ground] سطح المدينة عند y =', hits[0].point.y.toFixed(2)); player.position.y = hits[0].point.y; _groundedOnce = true; }
+    else if(!_groundedOnce){ /* لم نجد سطحاً بعد — اترك الشخصية مكانها */ }
+    else { player.position.y = SAFETY_Y; }
+  }
 
   function animate(){
     requestAnimationFrame(animate);
@@ -543,10 +575,13 @@
         
         if(walkAction) walkAction.paused = false;
       } else {
-        if(walkAction) walkAction.paused = true;
+        // [fix] عند الوقوف جمّد على إطار مشي طبيعي (إن كان على إطار البداية اقفز لإطار طبيعي)
+        if(walkAction){ if(walkAction.time < 0.05){ walkAction.time = 0.3; } walkAction.paused = true; }
       }
       
       if(mixer) mixer.update(dt);
+
+      groundPlayer();
 
       let best=null, bd=3.2;
       for(const p of PRODUCTS){ const d=Math.hypot(player.position.x-p.pos[0], player.position.z-p.pos[1]);
@@ -845,8 +880,8 @@
     const ed = editDrag.target; if(!ed) return;
     raycaster.setFromCamera(_ndc(e), camera);
     if(!raycaster.ray.intersectPlane(_groundPlane, _gpHit)) return;
-    const x = Math.max(-STREET.halfX-2, Math.min(STREET.halfX+2, _gpHit.x));
-    const z = Math.max(-STREET.halfZ, Math.min(STREET.halfZ, _gpHit.z));
+    const x = Math.max(STREET.minX-2, Math.min(STREET.maxX+2, _gpHit.x));
+    const z = Math.max(STREET.minZ, Math.min(STREET.maxZ, _gpHit.z));
     ed.group.position.x = x; ed.group.position.z = z;
     ed.ref.x = x; ed.ref.z = z;
     if(ed.type==='section') ed.ref._pos = [x, z];
@@ -882,7 +917,7 @@
   // ===== [city] تحميل مدينة CCity Building Set 1 (الكاتب: Neberkenezer — رخصة CC-BY) =====
   console.log('City model: "CCity Building Set 1" by Neberkenezer (Sketchfab) — CC-BY.');
   const CITY_FILE  = 'models/city.glb';
-  const CITY_SCALE = 0.0015;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
+  const CITY_SCALE = 0.0019;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
   const CITY_X = 0, CITY_Y = 0, CITY_Z = 0;   // إزاحة المدينة
   const CITY_ROT = 0;        // تدوير المدينة (راديان، مثلاً Math.PI/2)
   let cityGroup = null;
@@ -897,7 +932,19 @@
       m.rotation.y = CITY_ROT;
       m.position.set(CITY_X, CITY_Y, CITY_Z);
       scene.add(m); cityGroup = m;
-      console.log('[city] حُمِّلت المدينة. اضبط CITY_SCALE/CITY_Y حتى تقف الشخصية على الشارع.');
+      // طباعة حدود المدينة بعد المقياس (بإحداثيات المشهد) لمعرفة أين شوارعها
+      const wb = new THREE.Box3().setFromObject(m);
+      console.log('[city-bounds] X:['+wb.min.x.toFixed(1)+' → '+wb.max.x.toFixed(1)+']  Y:['+wb.min.y.toFixed(1)+' → '+wb.max.y.toFixed(1)+']  Z:['+wb.min.z.toFixed(1)+' → '+wb.max.z.toFixed(1)+']');
+      console.log('[city-bounds] المركز:', wb.getCenter(new THREE.Vector3()));
+      // [city] اضبط حدود التجوّل تلقائياً = حدود المدينة مع هامش أمان للداخل
+      const MARGIN = 2.5;
+      STREET.minX = wb.min.x + MARGIN; STREET.maxX = wb.max.x - MARGIN;
+      STREET.minZ = wb.min.z + MARGIN; STREET.maxZ = wb.max.z - MARGIN;
+      // ابدأ الشخصية في مركز المدينة الفعلي
+      const c = wb.getCenter(new THREE.Vector3());
+      player.position.x = c.x; player.position.z = c.z;
+      console.log('[city] الحدود مضبوطة تلقائياً:', STREET);
+      console.log('[city] حُمِّلت المدينة.');
     }, undefined, e=> console.warn('[city] تعذّر تحميل', CITY_FILE, e));
   }
   loadCity();
