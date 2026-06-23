@@ -61,6 +61,41 @@ app.post('/api/orders', async (req, res) => {
     }
 });
 
+// ===== [المرحلة 1] تخطيط المشهد (Scene Layout) =====
+app.get('/api/scene', async (req, res) => {
+    if (!db) return res.json(null);
+    try {
+        const doc = await db.collection('scene').doc('layout').get();
+        res.json(doc.exists ? doc.data() : null);
+    } catch (e) {
+        res.status(500).json({ error: 'فشل جلب المشهد' });
+    }
+});
+
+function requireAdmin(req, res, next) {
+    const token = req.get('x-admin-token');
+    if (!process.env.ADMIN_TOKEN) return res.status(500).json({ error: 'ADMIN_TOKEN غير مضبوط على الخادم' });
+    if (token !== process.env.ADMIN_TOKEN) return res.status(401).json({ error: 'غير مصرّح' });
+    next();
+}
+
+app.post('/api/admin/check', requireAdmin, (req, res) => res.json({ ok: true }));
+
+app.post('/api/admin/save', requireAdmin, async (req, res) => {
+    if (!db) return res.status(500).json({ error: 'قاعدة البيانات غير متصلة' });
+    try {
+        const layout = req.body && req.body.layout;
+        if (!layout || typeof layout !== 'object') return res.status(400).json({ error: 'تخطيط غير صالح' });
+        await db.collection('scene').doc('layout').set({
+            ...layout,
+            updatedAt: FieldValue.serverTimestamp()
+        });
+        res.json({ success: true });
+    } catch (e) {
+        res.status(500).json({ error: 'فشل حفظ المشهد' });
+    }
+});
+
 app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
 app.listen(PORT, () => console.log(`🚀 الخادم يعمل على المنفذ ${PORT}`));
