@@ -917,7 +917,11 @@
       m.rotation.y = CITY_ROT;
       m.position.set(CITY_X, CITY_Y, CITY_Z);
       scene.add(m); cityGroup = m;
-      console.log('[city] حُمِّلت المدينة. اضبط CITY_SCALE/CITY_Y حتى تقف الشخصية على الشارع.');
+      // طباعة حدود المدينة بعد المقياس (بإحداثيات المشهد) لمعرفة أين شوارعها
+      const wb = new THREE.Box3().setFromObject(m);
+      console.log('[city-bounds] X:['+wb.min.x.toFixed(1)+' → '+wb.max.x.toFixed(1)+']  Y:['+wb.min.y.toFixed(1)+' → '+wb.max.y.toFixed(1)+']  Z:['+wb.min.z.toFixed(1)+' → '+wb.max.z.toFixed(1)+']');
+      console.log('[city-bounds] المركز:', wb.getCenter(new THREE.Vector3()));
+      console.log('[city] حُمِّلت المدينة.');
     }, undefined, e=> console.warn('[city] تعذّر تحميل', CITY_FILE, e));
   }
   loadCity();
