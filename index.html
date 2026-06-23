@@ -225,12 +225,12 @@
   }
 
   const state = { cart:new Map(), mode:'3d', activeProduct:null, active:false, admin:false };
-  const STREET = { halfX:6.3, halfZ:24 };
+  const STREET = { halfX:40, halfZ:40 };   // [city] حدود أوسع للتجوّل داخل المدينة
   const PLAYER = { speed:6, radius:0.5 };
 
   const canvas = document.getElementById('c');
   const scene  = new THREE.Scene();
-  scene.fog = new THREE.Fog(0x9fb0bd, 22, 70);
+  scene.fog = new THREE.Fog(0x9fb0bd, 60, 220);   // [city] ضباب أبعد
 
   const camera = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 300);
   const renderer = new THREE.WebGLRenderer({ canvas, antialias:true, powerPreference:'high-performance' });
@@ -318,7 +318,9 @@
       BUILDINGS.push({ x: 10+Math.random()*1.5, z, w:4+Math.random()*2, d:5, h:h2, tint:tints[(Math.random()*tints.length)|0] });
     }
   }
-  function buildBuildings(){ BUILDINGS.forEach(b=>{ addBuilding(b.x, b.z, b.w, b.d, b.h, b.tint); const g=buildingGroups[buildingGroups.length-1]; if(g){ g.rotation.y=(b.rot||0); g.scale.setScalar(b.scale||1); g.userData.editable={type:'building', ref:b, group:g}; } }); }
+  // [city] البيوت المرسومة مخفية (المدينة الخارجية توفّر المباني). غيّر SHOW_CODE_BUILDINGS=true لإظهارها.
+  const SHOW_CODE_BUILDINGS = false;
+  function buildBuildings(){ if(!SHOW_CODE_BUILDINGS) return; BUILDINGS.forEach(b=>{ addBuilding(b.x, b.z, b.w, b.d, b.h, b.tint); const g=buildingGroups[buildingGroups.length-1]; if(g){ g.rotation.y=(b.rot||0); g.scale.setScalar(b.scale||1); g.userData.editable={type:'building', ref:b, group:g}; } }); }
   function buildLights(){
     for(let z=-18; z<=18; z+=12){
       [-6.6,6.6].forEach(x=>{
@@ -876,6 +878,29 @@
       clearEditSelection(); rebuildScene(); renderEditor(); toast('حُذف'); return;
     }
   }
+
+  // ===== [city] تحميل مدينة CCity Building Set 1 (الكاتب: Neberkenezer — رخصة CC-BY) =====
+  console.log('City model: "CCity Building Set 1" by Neberkenezer (Sketchfab) — CC-BY.');
+  const CITY_FILE  = 'models/city.glb';
+  const CITY_SCALE = 0.05;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
+  const CITY_X = 0, CITY_Y = 0, CITY_Z = 0;   // إزاحة المدينة
+  const CITY_ROT = 0;        // تدوير المدينة (راديان، مثلاً Math.PI/2)
+  let cityGroup = null;
+  function loadCity(){
+    loader.load(CITY_FILE, (gltf)=>{
+      const m = gltf.scene;
+      const box = new THREE.Box3().setFromObject(m); const size = new THREE.Vector3(); box.getSize(size);
+      console.log('[city] الحجم الأصلي ≈ X:'+size.x.toFixed(1)+' Y:'+size.y.toFixed(1)+' Z:'+size.z.toFixed(1)
+        + ' | إن كان ضخماً جرّب CITY_SCALE أصغر، وإن كان صغيراً جرّبه أكبر.');
+      m.traverse(o=>{ if(o.isMesh){ o.castShadow=true; o.receiveShadow=true; o.frustumCulled=false; } });
+      m.scale.setScalar(CITY_SCALE);
+      m.rotation.y = CITY_ROT;
+      m.position.set(CITY_X, CITY_Y, CITY_Z);
+      scene.add(m); cityGroup = m;
+      console.log('[city] حُمِّلت المدينة. اضبط CITY_SCALE/CITY_Y حتى تقف الشخصية على الشارع.');
+    }, undefined, e=> console.warn('[city] تعذّر تحميل', CITY_FILE, e));
+  }
+  loadCity();
 
   // [المرحلة 1] جلب المشهد من Firestore عبر الخادم (مع رجوع آمن للافتراضي) ثم البناء
   async function loadScene(){
