@@ -902,7 +902,7 @@
   // ===== [city] تحميل مدينة CCity Building Set 1 (الكاتب: Neberkenezer — رخصة CC-BY) =====
   console.log('City model: "CCity Building Set 1" by Neberkenezer (Sketchfab) — CC-BY.');
   const CITY_FILE  = 'models/city.glb';
-  const CITY_SCALE = 0.0015;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
+  const CITY_SCALE = 0.0022;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
   const CITY_X = 0, CITY_Y = 0, CITY_Z = 0;   // إزاحة المدينة
   const CITY_ROT = 0;        // تدوير المدينة (راديان، مثلاً Math.PI/2)
   let cityGroup = null;
@@ -921,6 +921,14 @@
       const wb = new THREE.Box3().setFromObject(m);
       console.log('[city-bounds] X:['+wb.min.x.toFixed(1)+' → '+wb.max.x.toFixed(1)+']  Y:['+wb.min.y.toFixed(1)+' → '+wb.max.y.toFixed(1)+']  Z:['+wb.min.z.toFixed(1)+' → '+wb.max.z.toFixed(1)+']');
       console.log('[city-bounds] المركز:', wb.getCenter(new THREE.Vector3()));
+      // [city] اضبط حدود التجوّل تلقائياً = حدود المدينة مع هامش أمان للداخل
+      const MARGIN = 2.5;
+      STREET.minX = wb.min.x + MARGIN; STREET.maxX = wb.max.x - MARGIN;
+      STREET.minZ = wb.min.z + MARGIN; STREET.maxZ = wb.max.z - MARGIN;
+      // ابدأ الشخصية في مركز المدينة الفعلي
+      const c = wb.getCenter(new THREE.Vector3());
+      player.position.x = c.x; player.position.z = c.z;
+      console.log('[city] الحدود مضبوطة تلقائياً:', STREET);
       console.log('[city] حُمِّلت المدينة.');
     }, undefined, e=> console.warn('[city] تعذّر تحميل', CITY_FILE, e));
   }
