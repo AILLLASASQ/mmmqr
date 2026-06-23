@@ -537,7 +537,7 @@
     _downRay.set(_downOrigin, _downDir);
     _downRay.far = 2000;
     const hits = _downRay.intersectObject(cityGroup, true);
-    if(hits.length){ player.position.y = hits[0].point.y; _groundedOnce = true; }
+    if(hits.length){ if(!_groundedOnce) console.log('[ground] سطح المدينة عند y =', hits[0].point.y.toFixed(2)); player.position.y = hits[0].point.y; _groundedOnce = true; }
     else if(!_groundedOnce){ /* لم نجد سطحاً بعد — اترك الشخصية مكانها */ }
     else { player.position.y = SAFETY_Y; }
   }
