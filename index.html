@@ -529,13 +529,17 @@
   const _downOrigin = new THREE.Vector3();
   const _downDir = new THREE.Vector3(0,-1,0);
   const CITY_PROBE_UP = 50;   // ارتفاع بدء الشعاع فوق الشخصية
+  let _groundedOnce = false;
   function groundPlayer(){
-    if(!cityGroup){ player.position.y = SAFETY_Y; return; }
-    _downOrigin.set(player.position.x, player.position.y + CITY_PROBE_UP, player.position.z);
+    if(!cityGroup){ return; }   // لا تُسقطها قبل تحميل المدينة
+    // ابدأ الشعاع من ارتفاع ثابت عالٍ فوق المدينة مهما كان موضع الشخصية
+    _downOrigin.set(player.position.x, 500, player.position.z);
     _downRay.set(_downOrigin, _downDir);
-    _downRay.far = CITY_PROBE_UP + 200;
+    _downRay.far = 2000;
     const hits = _downRay.intersectObject(cityGroup, true);
-    player.position.y = hits.length ? hits[0].point.y : SAFETY_Y;
+    if(hits.length){ player.position.y = hits[0].point.y; _groundedOnce = true; }
+    else if(!_groundedOnce){ /* لم نجد سطحاً بعد — اترك الشخصية مكانها */ }
+    else { player.position.y = SAFETY_Y; }
   }
 
   function animate(){
