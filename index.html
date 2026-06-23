@@ -371,6 +371,8 @@
       console.log('[walk] clip=' + clip.name + ' | مسارات مرتبطة=' + bound + '/' + clip.tracks.length);
       if (bound === 0) console.warn('⚠ هيكل العظام غير متطابق: أنميشن ' + WALK_FILE + ' لا يناسب ' + CHARACTER_MESH + ' (ستقف الشخصية بلا حركة).');
       walkAction = mixer.clipAction(clip); walkAction.play();
+      // [fix] قدّم الأنميشن قليلاً ثم جمّده على إطار مشي طبيعي (بدل T-pose عند الوقوف)
+      walkAction.time = 0.3; mixer.update(0); walkAction.paused = true;
     };
 
     loader.load(WALK_FILE, (walkGltf) => {
@@ -902,7 +904,7 @@
   // ===== [city] تحميل مدينة CCity Building Set 1 (الكاتب: Neberkenezer — رخصة CC-BY) =====
   console.log('City model: "CCity Building Set 1" by Neberkenezer (Sketchfab) — CC-BY.');
   const CITY_FILE  = 'models/city.glb';
-  const CITY_SCALE = 0.0022;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
+  const CITY_SCALE = 0.0019;   // ← اضبط هذا حتى يصير حجم المدينة مناسباً (جرّب 0.02 ، 0.1 ، 0.5 ، 1 ...)
   const CITY_X = 0, CITY_Y = 0, CITY_Z = 0;   // إزاحة المدينة
   const CITY_ROT = 0;        // تدوير المدينة (راديان، مثلاً Math.PI/2)
   let cityGroup = null;
