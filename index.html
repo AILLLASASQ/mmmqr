@@ -318,7 +318,7 @@
       BUILDINGS.push({ x: 10+Math.random()*1.5, z, w:4+Math.random()*2, d:5, h:h2, tint:tints[(Math.random()*tints.length)|0] });
     }
   }
-  function buildBuildings(){ BUILDINGS.forEach(b=>{ addBuilding(b.x, b.z, b.w, b.d, b.h, b.tint); const g=buildingGroups[buildingGroups.length-1]; if(g) g.userData.editable={type:'building', ref:b, group:g}; }); }
+  function buildBuildings(){ BUILDINGS.forEach(b=>{ addBuilding(b.x, b.z, b.w, b.d, b.h, b.tint); const g=buildingGroups[buildingGroups.length-1]; if(g){ g.rotation.y=(b.rot||0); g.scale.setScalar(b.scale||1); g.userData.editable={type:'building', ref:b, group:g}; } }); }
   function buildLights(){
     for(let z=-18; z<=18; z+=12){
       [-6.6,6.6].forEach(x=>{
@@ -417,7 +417,7 @@
   }
   function buildSection(sec){
     const [x,z]=sec._pos, side=sec._side;
-    const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=-side*Math.PI/2;
+    const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=-side*Math.PI/2 + (sec.rot||0); g.scale.setScalar(sec.scale||1);
     const W=2.4, D=1.0, n=sec.products.length, tier=0.7, baseH=0.35, top=0.55;
     const H=baseH + n*tier + top;
     const metal=new THREE.MeshStandardMaterial({color:0xe9e9ec, roughness:.55, metalness:.15});
@@ -722,6 +722,18 @@
     let h = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
       + '<b style="font-size:15px">🛠 محرّر المتجر</b>'
       + '<button id="ed-save" style="border:none;background:var(--ok);color:#0f140c;padding:8px 14px;border-radius:9px;font-weight:700">💾 حفظ</button></div>';
+    if(selectedEdit){
+      const tname = selectedEdit.type==='section' ? ('قسم: '+(selectedEdit.ref.name||'')) : 'مبنى';
+      h += '<div style="background:var(--brass-soft);border:1px solid var(--brass);border-radius:10px;padding:10px;margin-bottom:12px">'
+        + '<div style="color:var(--brass);margin-bottom:8px">المحدّد · '+tname+'</div>'
+        + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+        + '<button data-ed="rotL" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">↺</button>'
+        + '<button data-ed="rotR" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">↻</button>'
+        + '<button data-ed="sUp" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">＋</button>'
+        + '<button data-ed="sDn" style="flex:1;border:1px solid var(--line);background:#0000;color:var(--ink);padding:8px;border-radius:8px">－</button>'
+        + '<button data-ed="del" style="flex:1;border:1px solid #c0392b;background:#0000;color:#c0392b;padding:8px;border-radius:8px">🗑</button>'
+        + '</div></div>';
+    }
     h += '<div style="color:var(--brass);margin:6px 0 8px">الأقسام</div>';
     SECTIONS.forEach((sec,si)=>{
       h += '<div style="background:var(--surface-2);border-radius:10px;padding:10px;margin-bottom:8px">'
@@ -750,6 +762,7 @@
     editorEl.querySelectorAll('[data-delsec]').forEach(b=> b.onclick=()=>{ SECTIONS.splice(+b.dataset.delsec,1); rebuildScene(); renderEditor(); });
     editorEl.querySelectorAll('[data-addprod]').forEach(b=> b.onclick=()=> _addProductUI(+b.dataset.addprod));
     editorEl.querySelectorAll('[data-delprod]').forEach(b=> b.onclick=()=>{ const a=b.dataset.delprod.split(':'); SECTIONS[+a[0]].products.splice(+a[1],1); rebuildScene(); renderEditor(); });
+    editorEl.querySelectorAll('[data-ed]').forEach(b=> b.onclick=()=> _editAction(b.dataset.ed));
   }
 
   function _addSectionUI(){
@@ -778,9 +791,10 @@
       id: sec.id, name: sec.name, side: sec.side, edge: sec.edge,
       x: sec._pos ? sec._pos[0] : undefined,
       z: sec._pos ? sec._pos[1] : undefined,
+      rot: sec.rot || 0, scale: sec.scale || 1,
       products: sec.products.map(pr=>({ id: pr.id, name: pr.name, price: pr.price }))
     }));
-    const cleanBuildings = BUILDINGS.map(b=>({ x:b.x, z:b.z, w:b.w, d:b.d, h:b.h, tint:b.tint }));
+    const cleanBuildings = BUILDINGS.map(b=>({ x:b.x, z:b.z, w:b.w, d:b.d, h:b.h, tint:b.tint, rot:b.rot||0, scale:b.scale||1 }));
     toast('جارٍ الحفظ…');
     try{
       const r = await fetch('/api/admin/save', { method:'POST',
@@ -837,6 +851,31 @@
     if(_hl) _hl.setFromObject(ed.group);
   }
   function editDragEnd(){ editDrag.active = false; editDrag.target = null; }
+
+  // ===== [المرحلة 2-ب-2] تدوير/تكبير/حذف العنصر المحدّد =====
+  function _applyTransform(ed){
+    const g = ed.group;
+    if(ed.type==='section'){
+      g.rotation.y = -ed.ref._side*Math.PI/2 + (ed.ref.rot||0);
+    } else {
+      g.rotation.y = (ed.ref.rot||0);
+    }
+    g.scale.setScalar(ed.ref.scale||1);
+    if(_hl) _hl.setFromObject(g);
+  }
+  function _editAction(a){
+    const ed = selectedEdit; if(!ed) return;
+    const r = ed.ref;
+    if(a==='rotL'){ r.rot = (r.rot||0) + Math.PI/12; _applyTransform(ed); }
+    else if(a==='rotR'){ r.rot = (r.rot||0) - Math.PI/12; _applyTransform(ed); }
+    else if(a==='sUp'){ r.scale = Math.min(3, (r.scale||1)*1.1); _applyTransform(ed); }
+    else if(a==='sDn'){ r.scale = Math.max(0.3, (r.scale||1)/1.1); _applyTransform(ed); }
+    else if(a==='del'){
+      if(ed.type==='section'){ const i=SECTIONS.indexOf(r); if(i>=0) SECTIONS.splice(i,1); }
+      else { const i=BUILDINGS.indexOf(r); if(i>=0) BUILDINGS.splice(i,1); }
+      clearEditSelection(); rebuildScene(); renderEditor(); toast('حُذف'); return;
+    }
+  }
 
   // [المرحلة 1] جلب المشهد من Firestore عبر الخادم (مع رجوع آمن للافتراضي) ثم البناء
   async function loadScene(){
