@@ -126,11 +126,14 @@
 
   <div id="enter">
     <div>
-      <div class="ring">
-        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#C9A24B" stroke-width="1.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+      <h1>اختر شخصيتك</h1>
+      <div style="display:flex;align-items:center;justify-content:center;gap:24px;margin:22px 0">
+        <button id="char-prev" class="btn" style="font-size:22px;padding:10px 18px">◀</button>
+        <div id="char-name" style="font-family:var(--serif);font-size:22px;min-width:180px;color:var(--brass)"></div>
+        <button id="char-next" class="btn" style="font-size:22px;padding:10px 18px">▶</button>
       </div>
-      <h1>ابدأ التجوّل</h1>
-      <p>انقر للبدء. تمشي الشخصية بـ <kbd>W A S D</kbd> أو العصا، تُدار الكاميرا بالسحب، وتنقر على أي منتج في الشارع لعرض تفاصيله.</p>
+      <p>اختر بالسهمين، ثم اضغط «ابدأ». تتحرّك بـ <kbd>W A S D</kbd> أو العصا.</p>
+      <button id="char-start" class="btn btn-exit" style="margin-top:18px;font-size:16px;padding:13px 40px">ابدأ ▶</button>
     </div>
   </div>
 
@@ -347,12 +350,20 @@
   loader.setDRACOLoader(dracoLoader);
   let mixer = null, walkAction = null;
 
-  // [PATCH] character-mesh+walk-clip: الجسم من character.glb + المشي من walk_animation2.glb (بلا ثعلب)
-  const CHARACTER_MESH = 'models/walk_animation.glb';        // الجسم الظاهر
-  const WALK_FILE      = 'models/walk_animation.glb';  // مصدر أنميشن المشي فقط
+  // [char-select] قائمة الشخصيات — أضِف سطراً لكل شخصية جديدة (ملفها في models/)
+  const CHARACTERS = [
+    { id:'c1', name:'الشخصية الأولى', file:'models/walk_animation.glb' },
+    { id:'c2', name:'الشخصية الثانية', file:'models/walk_animation2.glb' },
+  ];
+  let charIndex = 0;
+  let _charLoaded = false;
   const TARGET_HEIGHT  = 1.7;
 
-  loader.load(CHARACTER_MESH, (charGltf) => {
+  // تُحمَّل الشخصية المختارة عند الضغط على «ابدأ» (لا عند بدء الصفحة)
+  function loadCharacter(file){
+    const CHARACTER_MESH = file;   // الجسم الظاهر
+    const WALK_FILE      = file;   // الأنميشن من نفس الملف
+    loader.load(CHARACTER_MESH, (charGltf) => {
     const model = charGltf.scene;
     let meshes = 0; model.traverse(o => { if (o.isMesh) meshes++; });
     console.log('[character] ميش=' + meshes, '| أنميشن داخلي=', charGltf.animations.map(a => a.name));
@@ -397,7 +408,8 @@
         if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
       });
     }
-  }, undefined, e => console.warn('تعذّر تحميل', CHARACTER_MESH, e));
+    }, undefined, e => console.warn('تعذّر تحميل', CHARACTER_MESH, e));
+  }
 
   const interactables = [];
   const productMeshes = {};
@@ -473,7 +485,25 @@
   function startWalk(){ state.active=true; enterScreen.classList.add('hidden'); joystick.classList.add('show'); }
   function pauseWalk(){ state.active=false; joystick.classList.remove('show'); }
   function promptResume(){ if(state.mode==='3d') startWalk(); }
-  enterScreen.addEventListener('click', startWalk);
+  // [char-select] منطق اختيار الشخصية
+  const _charNameEl = document.getElementById('char-name');
+  function _renderCharName(){ if(_charNameEl) _charNameEl.textContent = CHARACTERS[charIndex].name; }
+  _renderCharName();
+  document.getElementById('char-prev').addEventListener('click', ()=>{
+    charIndex = (charIndex - 1 + CHARACTERS.length) % CHARACTERS.length; _renderCharName();
+  });
+  document.getElementById('char-next').addEventListener('click', ()=>{
+    charIndex = (charIndex + 1) % CHARACTERS.length; _renderCharName();
+  });
+  addEventListener('keydown', e=>{
+    if(state.active) return;
+    if(e.key==='ArrowLeft'){ charIndex=(charIndex-1+CHARACTERS.length)%CHARACTERS.length; _renderCharName(); }
+    else if(e.key==='ArrowRight'){ charIndex=(charIndex+1)%CHARACTERS.length; _renderCharName(); }
+  });
+  document.getElementById('char-start').addEventListener('click', ()=>{
+    if(!_charLoaded){ _charLoaded = true; loadCharacter(CHARACTERS[charIndex].file); }
+    startWalk();
+  });
 
   function syncKeys(){ moveInput.forward=(keys.w?1:0)-(keys.s?1:0); moveInput.right=(keys.d?1:0)-(keys.a?1:0); }
   addEventListener('keydown',e=>{const k=e.key.toLowerCase(); if(k in keys){keys[k]=true; syncKeys();}});
