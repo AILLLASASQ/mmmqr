@@ -260,12 +260,12 @@
   sun.shadow.camera.left=-30; sun.shadow.camera.right=30; sun.shadow.camera.top=30; sun.shadow.camera.bottom=-30;
   sun.shadow.bias=-0.0004; scene.add(sun);
 
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(120,120),
-    new THREE.MeshStandardMaterial({color:0x2b2723, roughness:1}));
-  ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
-  const sidewalkMat=new THREE.MeshStandardMaterial({color:0x3b362f, roughness:1});
-  [-7.5,7.5].forEach(x=>{ const s=new THREE.Mesh(new THREE.BoxGeometry(2.4,0.2,STREET.halfZ*2+8),sidewalkMat);
-    s.position.set(x,0.1,0); s.receiveShadow=true; scene.add(s); });
+  // [city] أُزيلت الأرض والأرصفة الافتراضية — المدينة هي البيئة الحقيقية.
+  // أرض أمان غير مرئية: مرجع احتياطي لو فشل إسقاط الشخصية على سطح المدينة.
+  const SAFETY_Y = 0;
+  const safetyFloor = new THREE.Mesh(new THREE.PlaneGeometry(400,400),
+    new THREE.MeshBasicMaterial({visible:false}));
+  safetyFloor.rotation.x=-Math.PI/2; safetyFloor.position.y=SAFETY_Y; scene.add(safetyFloor);
 
   function facadeTexture(base){
     const cv=document.createElement('canvas'); cv.width=128; cv.height=128; const x=cv.getContext('2d');
@@ -333,10 +333,10 @@
       });
     }
   }
-  buildLights();
+  // [city] أعمدة الإنارة الافتراضية مُعطّلة — المدينة توفّر إنارتها. // buildLights();
 
   const player = new THREE.Group();
-  player.position.set(0,0,18); player.rotation.y = Math.PI;
+  player.position.set(0,0,0); player.rotation.y = Math.PI;   // [city] البداية وسط المدينة
   scene.add(player);
 
   const loader = new GLTFLoader();
@@ -524,6 +524,20 @@
   const hint=document.getElementById('hint'); let nearProduct=null;
   const clock=new THREE.Clock(); let walkPhase=0;
 
+  // ===== [city] إسقاط الشخصية على سطح المدينة (raycast لأسفل) =====
+  const _downRay = new THREE.Raycaster();
+  const _downOrigin = new THREE.Vector3();
+  const _downDir = new THREE.Vector3(0,-1,0);
+  const CITY_PROBE_UP = 50;   // ارتفاع بدء الشعاع فوق الشخصية
+  function groundPlayer(){
+    if(!cityGroup){ player.position.y = SAFETY_Y; return; }
+    _downOrigin.set(player.position.x, player.position.y + CITY_PROBE_UP, player.position.z);
+    _downRay.set(_downOrigin, _downDir);
+    _downRay.far = CITY_PROBE_UP + 200;
+    const hits = _downRay.intersectObject(cityGroup, true);
+    player.position.y = hits.length ? hits[0].point.y : SAFETY_Y;
+  }
+
   function animate(){
     requestAnimationFrame(animate);
     const dt=Math.min(clock.getDelta(),0.05);
@@ -547,6 +561,8 @@
       }
       
       if(mixer) mixer.update(dt);
+
+      groundPlayer();
 
       let best=null, bd=3.2;
       for(const p of PRODUCTS){ const d=Math.hypot(player.position.x-p.pos[0], player.position.z-p.pos[1]);
