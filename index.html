@@ -563,7 +563,8 @@
         
         if(walkAction) walkAction.paused = false;
       } else {
-        if(walkAction) walkAction.paused = true;
+        // [fix] عند الوقوف جمّد على إطار مشي طبيعي (إن كان على إطار البداية اقفز لإطار طبيعي)
+        if(walkAction){ if(walkAction.time < 0.05){ walkAction.time = 0.3; } walkAction.paused = true; }
       }
       
       if(mixer) mixer.update(dt);
