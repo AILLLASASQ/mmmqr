@@ -375,16 +375,23 @@
       walkAction.time = 0.3; mixer.update(0); walkAction.paused = true;
     };
 
-    loader.load(WALK_FILE, (walkGltf) => {
-      const clips = walkGltf.animations || [];
+    // [perf] الجسم والأنميشن في نفس الملف — لا نُنزّله مرّتين.
+    if (WALK_FILE === CHARACTER_MESH) {
+      const clips = charGltf.animations || [];
       const walk = clips.find(c => /walk/i.test(c.name)) || clips[1] || clips[0];
-      if (walk) applyWalk(walk);
-      else if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
-      else console.warn('⚠ لا يوجد أي clip للمشي.');
-    }, undefined, e => {
-      console.warn('تعذّر تحميل', WALK_FILE, e);
-      if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
-    });
+      if (walk) applyWalk(walk); else console.warn('⚠ لا يوجد clip للمشي في الملف.');
+    } else {
+      loader.load(WALK_FILE, (walkGltf) => {
+        const clips = walkGltf.animations || [];
+        const walk = clips.find(c => /walk/i.test(c.name)) || clips[1] || clips[0];
+        if (walk) applyWalk(walk);
+        else if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
+        else console.warn('⚠ لا يوجد أي clip للمشي.');
+      }, undefined, e => {
+        console.warn('تعذّر تحميل', WALK_FILE, e);
+        if (charGltf.animations.length) applyWalk(charGltf.animations[0]);
+      });
+    }
   }, undefined, e => console.warn('تعذّر تحميل', CHARACTER_MESH, e));
 
   const interactables = [];
